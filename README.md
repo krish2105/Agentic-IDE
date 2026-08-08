@@ -11,13 +11,14 @@ trust a session has accumulated.
 
 ## Status
 
-**Phase 0 complete.** Agent core and FastAPI server with WebSocket streaming
-and approval gating. 129 tests. No frontend yet.
+**Phases 0 and 1 complete.** Agent core, FastAPI server with WebSocket
+streaming and approval gating, and a working web IDE. 150 Python tests plus 3
+Playwright end-to-end tests that drive a real browser against real servers.
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Agent core, FastAPI server, WebSocket streaming, approval endpoint | ✅ |
-| 1 | Web IDE — Monaco, file tree, Docker sandbox, xterm.js | — |
+| 1 | Web IDE — Monaco, file tree, sandbox, xterm.js, chat panel | ✅ |
 | 2 | VS Code extension — webview chat, native diff integration | — |
 | 3 | Codebase RAG — pgvector + tree-sitter | — |
 | 3a–3c | Session Manager, background agents, browser subagent | — |
@@ -26,28 +27,37 @@ and approval gating. 129 tests. No frontend yet.
 ## Quick start
 
 ```bash
+# backend
 uv sync
-uv run pytest
 uv run uvicorn sani_server.app:app --port 8000
+
+# web IDE
+cd apps/web && npm install && npm run dev
 ```
 
-Then watch a session run, approving gated actions as they come up:
+Open `http://localhost:3000`, describe a task, and watch the plan arrive before
+anything runs. Interactive API docs at `http://127.0.0.1:8000/docs`.
+
+Prefer a terminal? `uv run python scripts/ws_client.py --workspace /tmp/demo`
+streams the same session and prompts for approvals inline.
+
+⚠️ There is no authentication and the shell tool executes commands. Run it on
+localhost only.
+
+## Tests
 
 ```bash
-uv run python scripts/ws_client.py --workspace /tmp/demo
+uv run pytest                        # 150 tests, ~3s, no network
+cd apps/web && npx playwright test   # 3 e2e tests, real browser + real servers
 ```
-
-Interactive API docs at `http://127.0.0.1:8000/docs`.
-
-⚠️ Phase 0 has no authentication and the shell tool executes commands. Run it
-on localhost only.
 
 ## Architecture
 
 ```
 packages/sani-core/     agent engine — planning, permissions, tools, execution
-packages/sani-server/   FastAPI + WebSocket transport, session manager
-apps/                   web IDE (Phase 1), VS Code extension (Phase 2)
+packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
+apps/web/               Next.js web IDE — Monaco, xterm.js, chat/plan/diffs dock
+apps/vscode/            VS Code extension (Phase 2)
 ```
 
 `sani-core` has no required third-party dependencies and imports no web

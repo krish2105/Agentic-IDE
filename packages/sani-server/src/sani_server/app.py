@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -20,9 +21,19 @@ from .routes.workspace import FileOutsideWorkspace
 from .sandbox import SandboxError
 from .stores import UnknownSession
 
-#: Phase 0 has no auth and the shell adapter executes commands, so the default
-#: origins are local development only. Do not widen this without adding auth.
+#: The server has no auth and the shell adapter executes commands, so the
+#: default origins are local development only. Do not widen this without adding
+#: auth. ``SANI_CORS_ORIGINS`` takes a comma-separated list for a non-default
+#: dev port; "*" is deliberately not special-cased.
 DEFAULT_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+CORS_ORIGINS_ENV_VAR = "SANI_CORS_ORIGINS"
+
+
+def allowed_origins() -> list[str]:
+    configured = os.environ.get(CORS_ORIGINS_ENV_VAR)
+    if not configured:
+        return DEFAULT_ORIGINS
+    return [origin.strip() for origin in configured.split(",") if origin.strip()]
 
 
 @asynccontextmanager
@@ -49,7 +60,7 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=DEFAULT_ORIGINS,
+        allow_origins=allowed_origins(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

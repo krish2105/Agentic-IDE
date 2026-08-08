@@ -1,8 +1,9 @@
 # Ṣāni' Studio — project memory
 
 A dual-client agentic IDE (VS Code extension + web IDE) over one Python backend.
-**Phase 0 is complete:** the agent core and the FastAPI server with WebSocket
-streaming and approval gating. No frontend exists yet.
+**Phases 0 and 1 are complete:** the agent core, the FastAPI server with
+WebSocket streaming and approval gating, and the Next.js web IDE. The VS Code
+extension (Phase 2) does not exist yet.
 
 Read this before changing the server. The API contract and the safety model
 below are consumed by both clients; changing either is a breaking change for
@@ -14,11 +15,13 @@ every surface at once.
 
 ```
 packages/sani-core/     agent engine — zero required third-party deps
-packages/sani-server/   FastAPI + WebSocket transport
+packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
 tests/core/             unit tests
 tests/server/           API + WebSocket end-to-end tests
 scripts/ws_client.py    manual stream viewer against a live server
-apps/                   empty — Phase 1 (web IDE), Phase 2 (VS Code extension)
+apps/web/               Next.js web IDE (Phase 1)
+apps/web/e2e/           Playwright tests — real browser against real servers
+apps/vscode/            not started (Phase 2)
 ```
 
 `sani-core` must never import a web framework. That constraint is what lets the
@@ -26,14 +29,20 @@ same engine back the server, a CLI, and the test harness, and it is the whole
 basis of the "one backend, two surfaces" claim. Anything HTTP- or WS-shaped
 belongs in `sani-server`.
 
+The web IDE holds no business logic. If a client needs to compute something
+about session state, that computation belongs in the Session Manager.
+
 ## Commands
 
 ```bash
 uv sync                                          # install workspace
-uv run pytest                                    # full suite (129 tests, ~2s)
+uv run pytest                                    # 150 tests, ~3s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
 uv run uvicorn sani_server.app:app --port 8000   # run the server
 uv run python scripts/ws_client.py --workspace /tmp/demo --approve-all
+
+cd apps/web && npm install && npm run dev        # web IDE on :3000
+cd apps/web && npx playwright test               # e2e — see apps/web/e2e/README.md
 ```
 
 ---
@@ -56,6 +65,15 @@ Section 7 of the build spec, minus the two RAG endpoints (Phase 3).
 | `/session/{id}/trust` | GET/PATCH | Trust tier state per action type. |
 | `/mission-control` | GET | One row per session for the dashboard. |
 | `/healthz` | GET | Version, protocol version, event types, always-confirm list. |
+
+Added in Phase 1 for the web IDE:
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/session/{id}/files` | GET | Flat workspace listing, directories first. |
+| `/session/{id}/file?path=` | GET | File contents. Flags binary and oversized. |
+| `/session/{id}/file` | PUT | Save an edit made by the human in the editor. |
+| `/session/{id}/terminal` | WS | PTY bridge for xterm.js. |
 
 **Not implemented:** `/rag/index`, `/rag/query` (Phase 3).
 
@@ -88,11 +106,45 @@ All errors are `{"error": "<slug>", "detail": "<message>"}`.
 | 400 | `invalid_workspace` | Missing dir, or outside `SANI_WORKSPACE_ROOT` |
 | 400 | `permission_locked` | Tried to auto-approve an always-confirm action type |
 | 400 | `tool_error` | Malformed step params |
+| 403 | `outside_workspace` | File path escapes the session workspace |
 | 404 | `unknown_session` / `unknown_action` | No such id |
 | 409 | `already_resolved` | Approve/reject called twice on one action |
-| 409 | `invalid_state` | Pause/resume on a finished session; unknown action type |
+| 409 | `invalid_state` | Pause/resume on a finished session; unknown action type; not a file |
+| 500 | `sandbox_error` | Terminal could not be started |
 
 WebSocket close code `4404` means unknown session.
+
+## Terminal protocol
+
+`WS /session/{id}/terminal?cols=&rows=`, JSON both ways.
+
+```
+client -> {"type":"input","data":"ls\r"} | {"type":"resize","cols":120,"rows":30}
+server -> {"type":"ready","sandbox":{...}} | {"type":"output","data":"..."}
+          {"type":"exit"} | {"type":"error","data":"..."}
+```
+
+The terminal is deliberately **not** gated by the permission engine. Judging a
+person's own shell would be theatre when they can already run anything the
+server user can. The agent's commands are the ones that get judged.
+
+## Sandbox
+
+`SANI_SANDBOX=local` (default) or `docker`; `SANI_SANDBOX_IMAGE` sets the image.
+
+- **`LocalSandbox`** runs a PTY as the server user in the session workspace. It
+  provides **no isolation** and says so in its own `describe()`. Correct for
+  local single-user development and nothing else.
+- **`DockerSandbox`** starts one resource-capped, network-less container per
+  session. ⚠️ **Never executed** — it was written in an environment with the
+  Docker client but no daemon, and reports `verified: false`. Verify it before
+  relying on it: start a daemon, `SANI_SANDBOX=docker`, open a session, and
+  confirm the terminal attaches and `docker ps` shows `sani-<session_id>`.
+
+**The agent's shell tool still runs on the host, not in the sandbox.** The
+sandbox currently isolates only the interactive terminal. Closing that gap is
+open work; until then the always-confirm tier is what stands between the agent
+and the host, not the container.
 
 ---
 
@@ -224,13 +276,42 @@ Reading from the socket to prove nothing arrives hangs forever. See
 **To test something mid-plan, park it on an approval first.** That is the only
 point where the executor's position is deterministic.
 
+### End-to-end (browser)
+
+`apps/web/e2e/` drives a real Chromium against a real Next.js build and a real
+server. Both servers must already be running — see `apps/web/e2e/README.md` for
+the gotchas, of which the two that cost the most time are: `NEXT_PUBLIC_*` is
+inlined at **build** time, and rebuilding under a running `next start` corrupts
+`.next` and produces 500s that look exactly like application bugs.
+
 ---
 
-## Known limits of Phase 0
+## Web IDE notes
+
+- **One accent, one meaning.** `--color-agent` (violet) marks agent-authored
+  things only: agent messages, added diff lines, touched files in the tree.
+  `--color-attention` (amber) means "this needs *you*". Do not blur them — the
+  whole point is that a glance separates human origin from agent origin.
+- **Monaco is served from `/monaco`, not a CDN.** `scripts/copy-monaco.mjs`
+  runs on `predev`/`prebuild`. `public/monaco/` is gitignored (24 MB).
+- **The stream hook owns reconnection.** `useSessionStream` reopens with
+  `?from_seq=<lastSeq>` and drops any event whose seq it has already applied,
+  so an overlapping replay is idempotent.
+- **An open tab reloads when the agent rewrites the file underneath it, unless
+  the human has unsaved edits.** Silently discarding those would be theft.
+
+---
+
+## Known limits
 
 - ⚠️ **No authentication, and the shell adapter executes commands.** This is
-  remote code execution if exposed. Bind localhost only. Do not deploy until
-  Phase 1 adds auth. CORS is pinned to `localhost:3000`.
+  remote code execution if exposed. Bind localhost only. Do not deploy this
+  anywhere reachable until auth exists. CORS defaults to `localhost:3000`;
+  `SANI_CORS_ORIGINS` widens it and should not be used to reach the internet.
+- The file API and the terminal inherit that: both operate as the server user,
+  and the only containment is the workspace path check.
+- Monaco bundles a `dompurify` with one low and one moderate advisory (hover
+  tooltip rendering). No upstream fix is available; `npm audit` reports it.
 - `SANI_WORKSPACE_ROOT`, when set, constrains every session workspace to live
   inside it. Unset, any existing directory is accepted except a small list of
   system paths — a typo guard, not a security boundary.
@@ -245,7 +326,11 @@ point where the executor's position is deterministic.
 - Context compaction is accounting plus a no-op hook. Token counts are
   `len/4` estimates, flagged `"estimated": true`.
 
-## Phase 0 departures from the build spec
+- The file tree is a flat listing capped at 5000 entries and skips vendored and
+  VCS directories. It does not watch for changes; it refreshes on demand and
+  whenever the agent emits a diff.
+
+## Departures from the build spec
 
 The spec assumed an existing 5,677-line engine with 215 passing tests. That
 engine was not available, so the core here was written from scratch alongside
@@ -255,9 +340,17 @@ surfaces," which is not what happened. The accurate version is that the core
 and the transport were designed together around one event contract, with the
 core kept dependency-free so the reusability claim stays testable.
 
+**Next.js 16, not 14.** Section 3 says Next.js 14. Every 14.x release, the
+latest included, carries 20+ unpatched high-severity advisories whose fix is
+Next 16. For greenfield App Router code that migration cost nothing, so the
+version number in the spec lost to the advisory list. Still App Router, now on
+React 19.
+
 ## Next
 
-Phase 1 (web IDE) and Phase 2 (VS Code extension) are both pure consumers of
-the contract above. No client-side business logic beyond rendering — if a
-client needs to compute something about session state, that computation belongs
-in the Session Manager.
+Phase 2 (VS Code extension) consumes the same contract through a shared webview
+bundle. Phase 3 adds RAG; 3a–3c add the Session Manager, Redis-backed
+background sessions, and the browser subagent.
+
+Two pieces of open work worth clearing first: routing the agent's shell tool
+through the sandbox, and verifying `DockerSandbox` against a live daemon.

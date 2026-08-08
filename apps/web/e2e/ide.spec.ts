@@ -1,0 +1,172 @@
+/**
+ * Phase 1 end-to-end: the real browser, the real Next.js app, the real FastAPI
+ * server, one real agent session.
+ *
+ * The Python suite proves the contract. This proves the product: that a person
+ * can open the IDE, watch a plan arrive, be stopped by an irreversible action,
+ * approve it, and see the result land in the editor and the terminal.
+ *
+ * Both servers must already be running. See e2e/README.md.
+ */
+import { expect, test } from "@playwright/test";
+import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const SERVER = process.env.SANI_SERVER_URL ?? "http://127.0.0.1:8000";
+
+function makeWorkspace(): string {
+  const dir = mkdtempSync(join(tmpdir(), "sani-e2e-"));
+  writeFileSync(join(dir, "README.md"), "# Demo project\n\nNothing here yet.\n");
+  writeFileSync(join(dir, "scratch.tmp"), "left over from a previous run\n");
+  return dir;
+}
+
+test.describe("Ṣāni' Studio web IDE", () => {
+  test("plan, block on an irreversible action, approve, and see the result", async ({
+    page,
+  }) => {
+    const workspace = makeWorkspace();
+
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: /Ṣāni' Studio/ })).toBeVisible();
+
+    // --- create a session from the UI -------------------------------------
+    await page.getByTestId("task-input").fill("add a greeting module");
+    await page.getByTestId("workspace-input").fill(workspace);
+    await page.getByTestId("create-session").click();
+
+    await page.waitForURL(/\/session\/ses_/);
+    const sessionId = page.url().split("/session/")[1];
+
+    // --- the plan is streamed and shown before anything runs --------------
+    await page.getByTestId("dock-tab-plan").click();
+    await expect(page.getByTestId("plan-list")).toBeVisible();
+    await expect(page.getByTestId("plan-step-0")).toContainText("README");
+    await expect(page.getByTestId("plan-step-2")).toContainText("scratch");
+
+    // --- the always-confirm delete stops the run --------------------------
+    const approval = page.getByTestId("approval-card");
+    await expect(approval).toBeVisible();
+    await expect(approval).toHaveAttribute("data-action-type", "file.delete");
+    await expect(page.getByTestId("approval-summary")).toContainText("scratch.tmp");
+    await expect(page.getByTestId("status-pill")).toHaveAttribute(
+      "data-status",
+      "blocked-on-approval",
+    );
+
+    // It is genuinely blocked: the file is still on disk.
+    expect(existsSync(join(workspace, "scratch.tmp"))).toBe(true);
+    // The auto-approved write already happened.
+    expect(existsSync(join(workspace, "greeting.py"))).toBe(true);
+
+    await page.screenshot({ path: "e2e/screenshots/01-blocked-on-approval.png" });
+
+    // --- the earlier write is visible as an agent-authored diff -----------
+    await page.getByTestId("dock-tab-diffs").click();
+    await expect(page.getByTestId("diff-path-greeting.py")).toBeVisible();
+
+    // --- the file tree marks what the agent touched -----------------------
+    await expect(page.getByTestId("file-greeting.py")).toHaveAttribute(
+      "data-agent-touched",
+      "true",
+    );
+
+    // --- approve, and the session finishes --------------------------------
+    await page.getByTestId("approve-button").click();
+    await expect(page.getByTestId("status-pill")).toHaveAttribute("data-status", "complete", {
+      timeout: 20_000,
+    });
+    await expect(approval).toBeHidden();
+    expect(existsSync(join(workspace, "scratch.tmp"))).toBe(false);
+
+    // --- every plan step is accounted for ---------------------------------
+    await page.getByTestId("dock-tab-plan").click();
+    for (const index of [0, 1, 2]) {
+      await expect(page.getByTestId(`plan-step-${index}`)).toHaveAttribute(
+        "data-step-status",
+        "complete",
+      );
+    }
+
+    // --- the editor opens what the agent wrote ----------------------------
+    await page.getByTestId("file-greeting.py").click();
+    await expect(page.getByTestId("tab-greeting.py")).toBeVisible();
+    await expect(page.getByTestId("editor-pane")).toContainText("def greet", {
+      timeout: 20_000,
+    });
+
+    await page.screenshot({ path: "e2e/screenshots/02-complete.png" });
+
+    // --- the terminal is live in the same workspace -----------------------
+    const terminal = page.getByTestId("terminal-host");
+    await expect(page.getByTestId("terminal-status")).toHaveText("ready", { timeout: 20_000 });
+    await terminal.click();
+    await page.keyboard.type("ls\r");
+    await expect(terminal).toContainText("greeting.py", { timeout: 20_000 });
+
+    await page.screenshot({ path: "e2e/screenshots/03-terminal.png", fullPage: false });
+
+    // --- the session shows up on the dashboard ----------------------------
+    await page.goto("/");
+    await expect(page.getByTestId(`session-row-${sessionId}`)).toContainText(
+      "add a greeting module",
+    );
+  });
+
+  test("rejecting an action leaves the file alone and still completes", async ({ page }) => {
+    const workspace = makeWorkspace();
+
+    await page.goto("/");
+    await page.getByTestId("task-input").fill("clean up the scratch file");
+    await page.getByTestId("workspace-input").fill(workspace);
+    await page.getByTestId("create-session").click();
+    await page.waitForURL(/\/session\/ses_/);
+
+    await expect(page.getByTestId("approval-card")).toBeVisible();
+    await page.getByTestId("reject-button").click();
+
+    await expect(page.getByTestId("status-pill")).toHaveAttribute("data-status", "complete", {
+      timeout: 20_000,
+    });
+
+    // Rejection is not failure: the run completes, minus that one step.
+    await page.getByTestId("dock-tab-plan").click();
+    await expect(page.getByTestId("plan-step-2")).toHaveAttribute(
+      "data-step-status",
+      "rejected",
+    );
+    expect(existsSync(join(workspace, "scratch.tmp"))).toBe(true);
+  });
+
+  test("a human edit in Monaco saves back to the workspace", async ({ page }) => {
+    const workspace = makeWorkspace();
+
+    const created = await fetch(`${SERVER}/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "editor save check", workspace, script: [] }),
+    });
+    const { session_id: sessionId } = await created.json();
+
+    await page.goto(`/session/${sessionId}`);
+    await page.getByTestId("file-README.md").click();
+    await expect(page.getByTestId("editor-pane")).toContainText("Demo project", {
+      timeout: 20_000,
+    });
+
+    // Click the rendered lines, not the hidden textarea -- Monaco's overlay
+    // intercepts pointer events aimed at the textarea itself.
+    await page.locator(".monaco-editor .view-lines").first().click();
+    await page.keyboard.press("Control+End");
+    // Monaco drops characters typed at full speed, so pace the input.
+    await page.keyboard.type(" EDITED-BY-HUMAN", { delay: 40 });
+
+    await expect(page.getByTestId("editor-pane")).toContainText("EDITED-BY-HUMAN");
+    await page.keyboard.press("Control+s");
+
+    await expect
+      .poll(() => readFileSync(join(workspace, "README.md"), "utf8"), { timeout: 15_000 })
+      .toContain("EDITED-BY-HUMAN");
+  });
+});

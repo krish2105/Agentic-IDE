@@ -34,7 +34,8 @@ def terminal_env(workspace: str) -> dict[str, str]:
             "TERM": "xterm-256color",
             "COLORTERM": "truecolor",
             "PWD": workspace,
-            # A stable prompt keeps the end-to-end terminal assertions readable.
+            # Only takes effect for shells that do not load an rc file; an
+            # interactive bash will overwrite it from /etc/bash.bashrc.
             "PS1": "sani:\\W$ ",
         }
     )

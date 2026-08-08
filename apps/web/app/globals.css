@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/*
+ * Dark-first, per spec Section 6.
+ *
+ * One rule governs colour here: `--color-agent` is reserved exclusively for
+ * agent-authored things -- agent messages, agent-written lines, agent diffs.
+ * Nothing else may use it, because its whole job is to let a glance at the
+ * screen tell you human origin from agent origin. `--color-attention` is
+ * separate and means "this needs *you*", which is a different question.
+ */
+@theme {
+  --color-base: #0b0d12;
+  --color-surface: #12151c;
+  --color-raised: #181c25;
+  --color-edge: #252b37;
+  --color-edge-strong: #333b4a;
+
+  --color-ink: #e6e9ef;
+  --color-ink-dim: #9aa3b2;
+  --color-ink-faint: #626c7d;
+
+  --color-agent: #a78bfa;
+  --color-agent-dim: #6d28d9;
+  --color-attention: #f5a524;
+  --color-ok: #4ade80;
+  --color-danger: #f87171;
+
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-base);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-edge-strong);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Agent-authored lines in a diff. The left border is the tell. */
+.agent-line {
+  border-left: 2px solid var(--color-agent);
+}
+
+@keyframes pulse-attention {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.pulse-attention {
+  animation: pulse-attention 1.8s ease-in-out infinite;
+}
