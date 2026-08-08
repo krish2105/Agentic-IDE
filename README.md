@@ -12,7 +12,7 @@ trust a session has accumulated.
 ## Status
 
 **Phases 0 and 1 complete.** Agent core, FastAPI server with WebSocket
-streaming and approval gating, and a working web IDE. 150 Python tests plus 3
+streaming and approval gating, and a working web IDE. 162 Python tests plus 3
 Playwright end-to-end tests that drive a real browser against real servers.
 
 | Phase | Scope | Status |

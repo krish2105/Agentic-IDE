@@ -21,6 +21,7 @@ from sani_core.session import AgentSession, Lifecycle, SessionStatus
 from sani_core.tools import build_tools
 
 from .hub import SessionHub
+from .runner import SandboxCommandRunner
 from .sandbox import build_sandbox
 from .stores import MemorySessionStore, SessionRecord, SessionStore, UnknownSession
 
@@ -104,18 +105,18 @@ class SessionManager:
             session.trust.set_auto_approve(parsed, auto)
 
         hub = SessionHub(session.id)
+        # The sandbox is built first: the agent's shell tool executes through
+        # it, so it is a dependency of the tools rather than a side channel.
+        sandbox = build_sandbox(ws, session.id)
         executor = Executor(
             session,
-            tools=build_tools(tool_names, ws),
+            tools=build_tools(tool_names, ws, runner=SandboxCommandRunner(sandbox)),
             model=build_model(model_backend, script=script),
             emit=hub.publish,
             registry=ApprovalRegistry(),
         )
         record = SessionRecord(
-            session=session,
-            hub=hub,
-            executor=executor,
-            sandbox=build_sandbox(ws, session.id),
+            session=session, hub=hub, executor=executor, sandbox=sandbox
         )
         self.store.put(record)
 

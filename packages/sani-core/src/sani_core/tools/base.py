@@ -17,6 +17,7 @@ from typing import Any
 
 from ..actions import ProposedAction, ToolResult
 from ..plan import PlanStep
+from ..runners import CommandRunner, LocalCommandRunner
 
 
 class ToolError(Exception):
@@ -26,8 +27,11 @@ class ToolError(Exception):
 class ToolAdapter(ABC):
     name: str = "tool"
 
-    def __init__(self, workspace: Path) -> None:
+    def __init__(self, workspace: Path, *, runner: CommandRunner | None = None) -> None:
         self.workspace = Path(workspace).resolve()
+        # Adapters that never execute a command ignore this; taking it on the
+        # base keeps construction uniform so build_tools has no special cases.
+        self.runner = runner or LocalCommandRunner()
 
     @abstractmethod
     def propose(self, step: PlanStep) -> ProposedAction:

@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 import shutil
 
+from sani_core.runners import CommandOutcome, LocalCommandRunner
+
 from .base import Sandbox
 from .pty_process import PtyTerminal, spawn_pty
 
@@ -46,6 +48,13 @@ def terminal_env(workspace: str) -> dict[str, str]:
 
 class LocalSandbox(Sandbox):
     kind = "local"
+
+    def __init__(self, workspace) -> None:
+        super().__init__(workspace)
+        self._runner = LocalCommandRunner()
+
+    async def exec(self, command: str, *, timeout_s: int = 120) -> CommandOutcome:
+        return await self._runner.run(command, cwd=self.workspace, timeout_s=timeout_s)
 
     async def open_terminal(self, *, cols: int = 80, rows: int = 24) -> PtyTerminal:
         shell = _pick_shell()

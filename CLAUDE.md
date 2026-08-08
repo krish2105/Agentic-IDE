@@ -36,7 +36,7 @@ about session state, that computation belongs in the Session Manager.
 
 ```bash
 uv sync                                          # install workspace
-uv run pytest                                    # 150 tests, ~3s
+uv run pytest                                    # 162 tests, ~8s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
 uv run uvicorn sani_server.app:app --port 8000   # run the server
 uv run python scripts/ws_client.py --workspace /tmp/demo --approve-all
@@ -141,10 +141,20 @@ server user can. The agent's commands are the ones that get judged.
   relying on it: start a daemon, `SANI_SANDBOX=docker`, open a session, and
   confirm the terminal attaches and `docker ps` shows `sani-<session_id>`.
 
-**The agent's shell tool still runs on the host, not in the sandbox.** The
-sandbox currently isolates only the interactive terminal. Closing that gap is
-open work; until then the always-confirm tier is what stands between the agent
-and the host, not the container.
+**Both the agent and the human go through the sandbox.** The agent's shell tool
+executes via `SandboxCommandRunner`, so `SANI_SANDBOX=docker` moves the agent
+too, not just the terminal.
+
+The seam is `sani_core.runners.CommandRunner`. The core cannot import the
+server, so it owns the interface and ships the honest default
+(`LocalCommandRunner`, host, no isolation); the server injects the
+sandbox-backed one at session creation. **A tool that shells out must go
+through its `self.runner`** — calling `asyncio.create_subprocess_*` directly
+puts it back outside the sandbox.
+
+Where a command will run is on `tool.proposed` as `preview.runs_in`, and on
+`tool.result` as `data.runs_in`, so the client can show it *before* approval:
+"host" and "container" are different decisions about the same command.
 
 ---
 
@@ -275,6 +285,12 @@ Reading from the socket to prove nothing arrives hangs forever. See
 
 **To test something mid-plan, park it on an approval first.** That is the only
 point where the executor's position is deterministic.
+
+**WebSocket teardown must not await.** Starlette's test client cancels the
+app's task scope immediately after sending its disconnect, so any cleanup that
+awaits gets interrupted half-done and escapes as a cancelled task. This caused
+a roughly-1-in-3 suite flake. `PtyTerminal.close()` is synchronous for that
+reason; keep it that way.
 
 ### End-to-end (browser)
 

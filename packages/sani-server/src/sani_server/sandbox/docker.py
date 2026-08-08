@@ -15,6 +15,8 @@ import asyncio
 import os
 import shutil
 
+from sani_core.runners import MAX_OUTPUT_CHARS, CommandOutcome
+
 from .base import Sandbox, SandboxError
 from .pty_process import PtyTerminal, spawn_pty
 
@@ -82,6 +84,26 @@ class DockerSandbox(Sandbox):
             if code != 0:
                 raise SandboxError(f"could not start sandbox container: {output}")
         self._started = True
+
+    def exec_argv(self, command: str) -> list[str]:
+        """Argv for a non-interactive command. Pure, so it is testable without
+        a daemon -- which matters, because nothing else here can be."""
+        return [
+            "docker", "exec",
+            "--workdir", CONTAINER_WORKDIR,
+            self.container,
+            "/bin/sh", "-c", command,
+        ]
+
+    async def exec(self, command: str, *, timeout_s: int = 120) -> CommandOutcome:
+        await self._ensure_container()
+        try:
+            code, output = await _run(*self.exec_argv(command), timeout=timeout_s)
+        except SandboxError as exc:
+            if "timed out" in str(exc):
+                return CommandOutcome(exit_code=None, output="", timed_out=True)
+            raise
+        return CommandOutcome(exit_code=code, output=output[:MAX_OUTPUT_CHARS])
 
     async def open_terminal(self, *, cols: int = 80, rows: int = 24) -> PtyTerminal:
         await self._ensure_container()

@@ -22,6 +22,7 @@ from .permissions import (
     evaluate,
 )
 from .plan import Plan, PlanStep, StepStatus
+from .runners import CommandOutcome, CommandRunner, LocalCommandRunner
 from .session import AgentSession, Lifecycle, SessionStatus
 from .tools import build_tools
 
@@ -34,6 +35,9 @@ __all__ = [
     "ActionType",
     "AgentSession",
     "AlreadyResolved",
+    "CommandOutcome",
+    "CommandRunner",
+    "LocalCommandRunner",
     "ApprovalOutcome",
     "ApprovalRegistry",
     "ContextWindow",

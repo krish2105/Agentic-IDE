@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..runners import CommandRunner
 from .base import ToolAdapter, ToolError
 from .file_editor import FileEditorTool
 from .shell import ShellTool
@@ -19,11 +20,13 @@ REGISTRY: dict[str, type[ToolAdapter]] = {
 }
 
 
-def build_tools(names: list[str], workspace: Path) -> dict[str, ToolAdapter]:
+def build_tools(
+    names: list[str], workspace: Path, *, runner: CommandRunner | None = None
+) -> dict[str, ToolAdapter]:
     unknown = [n for n in names if n not in REGISTRY]
     if unknown:
         raise ToolError(f"unknown tool(s): {unknown}; available: {sorted(REGISTRY)}")
-    return {name: REGISTRY[name](workspace) for name in names}
+    return {name: REGISTRY[name](workspace, runner=runner) for name in names}
 
 
 __all__ = ["REGISTRY", "FileEditorTool", "ShellTool", "ToolAdapter", "ToolError", "build_tools"]

@@ -58,42 +58,56 @@ async def terminal(
 
     await websocket.send_json({"type": "ready", "sandbox": record.sandbox.describe()})
 
+    # Each pump swallows its own transport errors so neither leaves an
+    # unretrieved exception behind when the other one wins the race.
     async def pump_output() -> None:
         # A PTY read can split a multi-byte character across chunks, so decode
         # incrementally rather than per-chunk.
         decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-        while True:
-            chunk = await session_terminal.read()
-            if not chunk:
-                await websocket.send_json({"type": "exit"})
-                return
-            await websocket.send_json({"type": "output", "data": decoder.decode(chunk)})
+        try:
+            while True:
+                chunk = await session_terminal.read()
+                if not chunk:
+                    await websocket.send_json({"type": "exit"})
+                    return
+                await websocket.send_json(
+                    {"type": "output", "data": decoder.decode(chunk)}
+                )
+        except (WebSocketDisconnect, RuntimeError, ConnectionError):
+            return
 
     async def pump_input() -> None:
-        while True:
-            message = await websocket.receive_json()
-            kind = message.get("type")
-            if kind == "input":
-                await session_terminal.write(message.get("data", "").encode())
-            elif kind == "resize":
-                session_terminal.resize(
-                    min(int(message.get("cols", cols)), MAX_COLS),
-                    min(int(message.get("rows", rows)), MAX_ROWS),
-                )
+        try:
+            while True:
+                message = await websocket.receive_json()
+                kind = message.get("type")
+                if kind == "input":
+                    await session_terminal.write(message.get("data", "").encode())
+                elif kind == "resize":
+                    session_terminal.resize(
+                        min(int(message.get("cols", cols)), MAX_COLS),
+                        min(int(message.get("rows", rows)), MAX_ROWS),
+                    )
+        except (WebSocketDisconnect, RuntimeError, ConnectionError, ValueError, TypeError):
+            return
 
     output_task = asyncio.create_task(pump_output())
     input_task = asyncio.create_task(pump_input())
-    try:
-        await asyncio.wait({output_task, input_task}, return_when=asyncio.FIRST_COMPLETED)
-    except (WebSocketDisconnect, RuntimeError):
-        pass
-    finally:
-        for task in (output_task, input_task):
-            task.cancel()
-        await asyncio.gather(output_task, input_task, return_exceptions=True)
-        await session_terminal.close()
+    done, _ = await asyncio.wait(
+        {output_task, input_task}, return_when=asyncio.FIRST_COMPLETED
+    )
 
-    try:
-        await websocket.close(code=1000)
-    except RuntimeError:
-        pass
+    # Teardown awaits nothing. The client cancels this task's scope as soon as
+    # it has sent its disconnect, so an awaiting cleanup path gets interrupted
+    # half-done and surfaces as a cancelled task rather than a clean close.
+    output_task.cancel()
+    input_task.cancel()
+    session_terminal.close()
+
+    # Only the shell ending is ours to announce; if the client is already gone,
+    # writing to the socket is what would raise.
+    if output_task in done:
+        try:
+            await websocket.close(code=1000)
+        except (WebSocketDisconnect, RuntimeError, ConnectionError):
+            pass

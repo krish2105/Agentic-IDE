@@ -8,7 +8,6 @@ one-character bypass of the always-confirm tier.
 
 from __future__ import annotations
 
-import asyncio
 import re
 import shlex
 from typing import Any
@@ -16,10 +15,8 @@ from typing import Any
 from ..actions import ProposedAction, ToolResult
 from ..permissions import ActionType
 from ..plan import PlanStep
+from ..runners import DEFAULT_TIMEOUT_S, CommandOutcome
 from .base import ToolAdapter, ToolError
-
-DEFAULT_TIMEOUT_S = 120
-MAX_OUTPUT_CHARS = 100_000
 
 NETWORK_BINARIES = frozenset(
     {
@@ -166,8 +163,8 @@ def classify(command: str) -> ActionType:
 class ShellTool(ToolAdapter):
     name = "shell"
 
-    def __init__(self, workspace, *, timeout_s: int = DEFAULT_TIMEOUT_S) -> None:
-        super().__init__(workspace)
+    def __init__(self, workspace, *, runner=None, timeout_s: int = DEFAULT_TIMEOUT_S) -> None:
+        super().__init__(workspace, runner=runner)
         self.timeout_s = timeout_s
 
     def propose(self, step: PlanStep) -> ProposedAction:
@@ -186,42 +183,33 @@ class ShellTool(ToolAdapter):
                 "command": command,
                 "cwd": str(self.workspace),
                 "classified_as": action_type.value,
+                # Where it will land, shown *before* approval. A command about
+                # to run on the host is a different decision from the same
+                # command about to run in a throwaway container.
+                "runs_in": self.runner.describe(),
             },
         )
 
     async def execute(self, action: ProposedAction, *, hunk_ids: list[str] | None = None) -> Any:
-        command = action.payload["command"]
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            cwd=self.workspace,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+        return await self.runner.run(
+            action.payload["command"], cwd=self.workspace, timeout_s=self.timeout_s
         )
-        try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self.timeout_s)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return {"exit_code": None, "output": "", "timed_out": True}
 
-        return {
-            "exit_code": proc.returncode,
-            "output": stdout.decode("utf-8", errors="replace")[:MAX_OUTPUT_CHARS],
-            "timed_out": False,
-        }
-
-    def result(self, action: ProposedAction, raw: Any) -> ToolResult:
+    def result(self, action: ProposedAction, raw: CommandOutcome) -> ToolResult:
         command = action.payload["command"]
-        if raw["timed_out"]:
+        where = self.runner.kind
+
+        if raw.timed_out:
             return ToolResult(
                 ok=False,
                 summary=f"Timed out after {self.timeout_s}s: {command}",
-                data={"command": command, "timed_out": True},
+                data={"command": command, "timed_out": True, "runs_in": where},
             )
-        ok = raw["exit_code"] == 0
+
+        ok = raw.exit_code == 0
         return ToolResult(
             ok=ok,
-            summary=f"{'Ran' if ok else 'Failed'} ({raw['exit_code']}): {command}",
-            output=raw["output"],
-            data={"command": command, "exit_code": raw["exit_code"]},
+            summary=f"{'Ran' if ok else 'Failed'} ({raw.exit_code}) in {where}: {command}",
+            output=raw.output,
+            data={"command": command, "exit_code": raw.exit_code, "runs_in": where},
         )

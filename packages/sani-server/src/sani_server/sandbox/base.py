@@ -13,6 +13,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from sani_core.runners import CommandOutcome
+
 
 class SandboxError(Exception):
     pass
@@ -32,7 +34,8 @@ class TerminalSession(ABC):
     def resize(self, cols: int, rows: int) -> None: ...
 
     @abstractmethod
-    async def close(self) -> None: ...
+    def close(self) -> None:
+        """Synchronous by design -- see ``PtyTerminal.close``."""
 
     @property
     @abstractmethod
@@ -48,6 +51,10 @@ class Sandbox(ABC):
 
     @abstractmethod
     async def open_terminal(self, *, cols: int = 80, rows: int = 24) -> TerminalSession: ...
+
+    @abstractmethod
+    async def exec(self, command: str, *, timeout_s: int = 120) -> CommandOutcome:
+        """Run one non-interactive command. This is the agent's shell path."""
 
     async def shutdown(self) -> None:
         """Release anything the sandbox holds. Safe to call more than once."""
