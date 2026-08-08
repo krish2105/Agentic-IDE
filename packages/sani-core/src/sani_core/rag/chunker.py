@@ -99,6 +99,22 @@ class Chunk:
         return f"{where} ({self.kind} {self.name})" if self.name else where
 
 
+def grammars_available() -> bool:
+    """Whether tree-sitter parsing is usable in this install.
+
+    Without it every file falls back to line windows, which still works but
+    retrieves noticeably worse. Silently degrading would leave someone
+    wondering why results got vague after a deploy.
+    """
+    try:
+        from tree_sitter_language_pack import get_parser
+
+        get_parser("python")
+        return True
+    except Exception:
+        return False
+
+
 def language_for(path: str | Path) -> str | None:
     return LANGUAGE_BY_SUFFIX.get(Path(path).suffix.lower())
 

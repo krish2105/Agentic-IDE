@@ -1,0 +1,44 @@
+# Render blueprint for the backend.
+#
+#   Render dashboard -> New -> Blueprint -> point at this repo.
+#   Then set SANI_AUTH_TOKEN and SANI_CORS_ORIGINS in the dashboard.
+#
+# ⚠️ This publishes a code-execution service; SANI_AUTH_TOKEN is the only thing
+# in front of it.
+
+services:
+  - type: web
+    name: sani-studio
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /healthz
+    # One instance: a session's executor and pending-approval futures live in
+    # the process that created it, so a second instance could read a session
+    # but never approve it.
+    numInstances: 1
+    disk:
+      name: workspaces
+      mountPath: /workspaces
+      sizeGB: 3
+    envVars:
+      - key: SANI_WORKSPACE_ROOT
+        value: /workspaces
+      - key: SANI_SESSION_STORE
+        value: redis
+      - key: SANI_REDIS_URL
+        fromService:
+          name: sani-redis
+          type: redis
+          property: connectionString
+      # Set both of these in the dashboard, not here.
+      - key: SANI_AUTH_TOKEN
+        sync: false
+      - key: SANI_CORS_ORIGINS
+        sync: false
+
+  - type: redis
+    name: sani-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []

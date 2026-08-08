@@ -1,0 +1,56 @@
+# Fly.io deployment for the backend.
+#
+#   fly launch --no-deploy --copy-config
+#   fly secrets set SANI_AUTH_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
+#   fly secrets set SANI_CORS_ORIGINS="https://your-app.vercel.app"
+#   fly volumes create sani_workspaces --size 3
+#   fly deploy
+#
+# ⚠️ This publishes a code-execution service. SANI_AUTH_TOKEN is the only thing
+# standing in front of it, so set it before the first deploy, not after.
+
+app = "sani-studio"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SANI_WORKSPACE_ROOT = "/workspaces"
+  # Redis is opt-in: add an Upstash instance and set SANI_SESSION_STORE=redis
+  # plus SANI_REDIS_URL as secrets. Without it sessions die with the machine.
+  SANI_SESSION_STORE = "memory"
+
+[[mounts]]
+  source = "sani_workspaces"
+  destination = "/workspaces"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Never scale to zero: a suspended machine drops in-flight sessions and any
+  # WebSocket attached to them.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # One machine, deliberately. A session's executor and pending-approval
+  # futures are process-local, so a second machine could read a session but
+  # never approve it. Horizontal scaling needs sticky routing per session.
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 50
+    soft_limit = 40
+
+[checks.health]
+  type = "http"
+  port = 8000
+  path = "/healthz"
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "15s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # The browser subagent needs headroom; drop to 512 if you never use it.
+  memory = "1gb"

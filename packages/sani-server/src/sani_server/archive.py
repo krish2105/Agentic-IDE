@@ -49,6 +49,10 @@ class SessionArchive(Protocol):
     def describe(self) -> dict: ...
 
 
+class MissingDependency(RuntimeError):
+    """An optional backend was selected but its package is not installed."""
+
+
 class NullArchive:
     """The Phase 0 behaviour: sessions live and die with the process."""
 
@@ -92,7 +96,15 @@ class RedisArchive:
     """
 
     def __init__(self, url: str | None = None, *, ttl_s: int = DEFAULT_TTL_S) -> None:
-        import redis.asyncio as aioredis
+        try:
+            import redis.asyncio as aioredis
+        except ImportError as exc:
+            # A production image built without the extra would otherwise die on
+            # an ImportError that says nothing about what to install.
+            raise MissingDependency(
+                "SANI_SESSION_STORE=redis needs the redis client: "
+                "install with `uv sync --extra redis` (or --extra all)"
+            ) from exc
 
         self.url = url or os.environ.get(REDIS_URL_ENV_VAR, DEFAULT_REDIS_URL)
         self.ttl_s = ttl_s

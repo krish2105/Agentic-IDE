@@ -325,6 +325,64 @@ are done. Not reasonable: leaving it up, or handing the URL to other people.
 For that you want per-user auth, `SANI_WORKSPACE_ROOT` per user, and
 `SANI_SANDBOX=docker`.
 
+### Deploying the backend to a host
+
+Artifacts are in the repo: `Dockerfile`, `docker-compose.yml`, `fly.toml`,
+`render.yaml`. All four set `SANI_AUTH_TOKEN` as a required input, because the
+thing being deployed runs shell commands.
+
+⚠️ **None of them has been built or run.** The environment they were written in
+has the Docker client and no daemon, and no network route to any deploy host.
+Your first `docker build` is the verification step.
+
+**One machine, one worker.** Every config pins this and it is not a
+performance choice: a session's executor, its sandbox and its pending-approval
+futures live in the process that created it. A second worker sharing Redis can
+*read* a session and replay its log, but cannot approve, pause or kill it —
+the future it would need to resolve is in another process. Horizontal scaling
+needs sticky routing per session, which is not built.
+
+**Docker Compose (a VM you control):**
+
+```bash
+export SANI_AUTH_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
+export SANI_CORS_ORIGINS="https://your-app.vercel.app"
+export SANI_WORKSPACES_HOST_DIR="$HOME/code"      # what the agent may touch
+docker compose up --build
+```
+
+It binds `127.0.0.1:8000` deliberately. Put a tunnel or an authenticating proxy
+in front rather than publishing the port.
+
+**Fly.io:**
+
+```bash
+fly launch --no-deploy --copy-config
+fly secrets set SANI_AUTH_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
+fly secrets set SANI_CORS_ORIGINS="https://your-app.vercel.app"
+fly volumes create sani_workspaces --size 3
+fly deploy
+```
+
+**Render:** point a Blueprint at this repo, then set `SANI_AUTH_TOKEN` and
+`SANI_CORS_ORIGINS` in the dashboard. `render.yaml` provisions Redis alongside.
+
+**Build the image with the extras.** `uv sync --no-dev` alone drops the Redis
+client and the tree-sitter grammars, so `SANI_SESSION_STORE=redis` fails at
+startup and RAG silently falls back to line-window chunking. The Dockerfile
+uses `--extra all`; if you write your own, do the same. `/rag/status` reports
+`syntax_aware` so you can tell from outside which one you got.
+
+### Deploying the frontend to Vercel
+
+Point a Vercel project at this repo with **Root Directory `apps/web`**. It
+detects Next.js and the npm workspace, and the shared client builds from
+source.
+
+Setting `NEXT_PUBLIC_SANI_SERVER` in Vercel's environment variables is
+optional — it is only the default. The runtime setting in the UI wins, which is
+what makes one build usable against a tunnel URL that changes on every restart.
+
 ### Other arrangements
 
 **Localhost only — still the best option.** Run the web IDE locally too and

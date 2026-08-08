@@ -1812,6 +1812,24 @@ dependencies = [
     { name = "sani-server" },
 ]
 
+[package.optional-dependencies]
+all = [
+    { name = "sani-core", extra = ["browser", "rag"] },
+    { name = "sani-server", extra = ["redis"] },
+]
+browser = [
+    { name = "sani-core", extra = ["browser"] },
+]
+litellm = [
+    { name = "sani-core", extra = ["litellm"] },
+]
+rag = [
+    { name = "sani-core", extra = ["rag"] },
+]
+redis = [
+    { name = "sani-server", extra = ["redis"] },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "httpx" },
@@ -1826,8 +1844,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "sani-core", editable = "packages/sani-core" },
+    { name = "sani-core", extras = ["browser"], marker = "extra == 'all'", editable = "packages/sani-core" },
+    { name = "sani-core", extras = ["browser"], marker = "extra == 'browser'", editable = "packages/sani-core" },
+    { name = "sani-core", extras = ["litellm"], marker = "extra == 'litellm'", editable = "packages/sani-core" },
+    { name = "sani-core", extras = ["rag"], marker = "extra == 'all'", editable = "packages/sani-core" },
+    { name = "sani-core", extras = ["rag"], marker = "extra == 'rag'", editable = "packages/sani-core" },
     { name = "sani-server", editable = "packages/sani-server" },
+    { name = "sani-server", extras = ["redis"], marker = "extra == 'all'", editable = "packages/sani-server" },
+    { name = "sani-server", extras = ["redis"], marker = "extra == 'redis'", editable = "packages/sani-server" },
 ]
+provides-extras = ["redis", "rag", "browser", "litellm", "all"]
 
 [package.metadata.requires-dev]
 dev = [

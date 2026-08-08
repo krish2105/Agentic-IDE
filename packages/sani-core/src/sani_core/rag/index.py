@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..workspace import IGNORED_DIR_NAMES, build_tree, is_probably_binary
-from .chunker import MAX_FILE_BYTES, Chunk, chunk_source
+from .chunker import MAX_FILE_BYTES, Chunk, chunk_source, grammars_available
 from .embed import Embedder, build_embedder
 from .store import Match, VectorStore, build_vector_store
 
@@ -104,6 +104,9 @@ class CodebaseIndex:
             "last_index": recorded.to_dict() if recorded else None,
             "embedder": self.embedder.describe(),
             "store": self.store.describe(),
+            # False means every file was chunked by line window rather than by
+            # function or class -- install the rag extra.
+            "syntax_aware": grammars_available(),
         }
 
     async def context_for(

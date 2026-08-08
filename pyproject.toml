@@ -8,6 +8,16 @@ dependencies = [
     "sani-server",
 ]
 
+[project.optional-dependencies]
+# Production installs opt in explicitly: `uv sync --no-dev --extra all`.
+# The dev group also pulls these so the test suite exercises them, but a
+# deployment must not depend on a dev group being present.
+redis = ["sani-server[redis]"]
+rag = ["sani-core[rag]"]
+browser = ["sani-core[browser]"]
+litellm = ["sani-core[litellm]"]
+all = ["sani-server[redis]", "sani-core[rag]", "sani-core[browser]"]
+
 [tool.uv]
 package = false
 

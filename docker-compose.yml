@@ -1,0 +1,40 @@
+# Backend plus Redis, for a local or single-VM deployment.
+#
+#   export SANI_AUTH_TOKEN="$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')"
+#   docker compose up --build
+#
+# The server binds to 127.0.0.1 on the host on purpose. Publishing it on
+# 0.0.0.0 exposes a code-execution service; put a tunnel or an authenticating
+# proxy in front instead of changing this line.
+
+services:
+  server:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      # Required. The container refuses to be useful safely without it.
+      SANI_AUTH_TOKEN: ${SANI_AUTH_TOKEN:?set SANI_AUTH_TOKEN before starting}
+      SANI_SESSION_STORE: redis
+      SANI_REDIS_URL: redis://redis:6379/0
+      SANI_CORS_ORIGINS: ${SANI_CORS_ORIGINS:-http://localhost:3000}
+      SANI_WORKSPACE_ROOT: /workspaces
+    volumes:
+      # The repositories the agent may touch. Nothing outside this is reachable.
+      - ${SANI_WORKSPACES_HOST_DIR:-./workspaces}:/workspaces
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # No persistence: the archive is a session cache with a 7-day TTL, not a
+    # system of record. Losing it costs history, not work.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
