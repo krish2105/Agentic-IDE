@@ -16,6 +16,8 @@ from sani_core.tools import ToolError
 
 from .manager import InvalidState, InvalidWorkspace, SessionManager
 from .routes import ROUTERS
+from .routes.workspace import FileOutsideWorkspace
+from .sandbox import SandboxError
 from .stores import UnknownSession
 
 #: Phase 0 has no auth and the shell adapter executes commands, so the default
@@ -33,6 +35,7 @@ async def lifespan(app: FastAPI):
             record.executor.kill()
             record.task.cancel()
             await asyncio.gather(record.task, return_exceptions=True)
+        await record.sandbox.shutdown()
 
 
 def create_app(manager: SessionManager | None = None) -> FastAPI:
@@ -85,6 +88,14 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
     @app.exception_handler(ToolError)
     async def _tool_error(request: Request, exc: ToolError):
         return _error(400, "tool_error", str(exc))
+
+    @app.exception_handler(FileOutsideWorkspace)
+    async def _outside_workspace(request: Request, exc: FileOutsideWorkspace):
+        return _error(403, "outside_workspace", str(exc))
+
+    @app.exception_handler(SandboxError)
+    async def _sandbox_error(request: Request, exc: SandboxError):
+        return _error(500, "sandbox_error", str(exc))
 
     @app.get("/healthz", tags=["meta"])
     async def healthz() -> dict:

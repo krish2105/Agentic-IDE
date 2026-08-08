@@ -21,6 +21,7 @@ from sani_core.session import AgentSession, Lifecycle, SessionStatus
 from sani_core.tools import build_tools
 
 from .hub import SessionHub
+from .sandbox import build_sandbox
 from .stores import MemorySessionStore, SessionRecord, SessionStore, UnknownSession
 
 #: When set, every session workspace must live inside this directory.
@@ -110,7 +111,12 @@ class SessionManager:
             emit=hub.publish,
             registry=ApprovalRegistry(),
         )
-        record = SessionRecord(session=session, hub=hub, executor=executor)
+        record = SessionRecord(
+            session=session,
+            hub=hub,
+            executor=executor,
+            sandbox=build_sandbox(ws, session.id),
+        )
         self.store.put(record)
 
         # The executor runs detached. Clients attach to the stream whenever they
@@ -174,6 +180,7 @@ class SessionManager:
                 await asyncio.wait_for(asyncio.shield(record.task), timeout=5)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 record.task.cancel()
+        await record.sandbox.shutdown()
         return record
 
     # ---- views ----

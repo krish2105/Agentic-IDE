@@ -15,6 +15,7 @@ from sani_core.executor import Executor
 from sani_core.session import AgentSession
 
 from ..hub import SessionHub
+from ..sandbox import Sandbox
 
 
 @dataclass
@@ -22,12 +23,13 @@ class SessionRecord:
     """A live session plus the runtime handles the transport needs.
 
     Only ``session`` is serialisable state. A Redis store persists that and
-    rebuilds ``hub`` / ``executor`` / ``task`` on reattach.
+    rebuilds ``hub`` / ``executor`` / ``task`` / ``sandbox`` on reattach.
     """
 
     session: AgentSession
     hub: SessionHub
     executor: Executor
+    sandbox: Sandbox
     task: asyncio.Task | None = None
 
 

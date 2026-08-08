@@ -1,4 +1,14 @@
-from . import approvals, diff, lifecycle, mission_control, sessions, stream, trust
+from . import (
+    approvals,
+    diff,
+    lifecycle,
+    mission_control,
+    sessions,
+    stream,
+    terminal,
+    trust,
+    workspace,
+)
 
 ROUTERS = [
     sessions.router,
@@ -8,6 +18,8 @@ ROUTERS = [
     diff.router,
     trust.router,
     mission_control.router,
+    workspace.router,
+    terminal.router,
 ]
 
 __all__ = ["ROUTERS"]

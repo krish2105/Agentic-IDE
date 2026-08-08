@@ -10,6 +10,7 @@ from ..actions import ProposedAction, ToolResult
 from ..diffs import apply_hunks, compute_diff
 from ..permissions import ActionType
 from ..plan import PlanStep
+from ..workspace import resolve_in_workspace
 from .base import ToolAdapter, ToolError
 
 #: Path patterns treated as credential material. Matched against the path
@@ -43,24 +44,14 @@ def looks_like_secret(relpath: str) -> bool:
 class FileEditorTool(ToolAdapter):
     name = "file_editor"
 
-    def _resolve(self, raw_path: str) -> tuple[Path, bool]:
-        """Resolve a path and report whether it escaped the workspace.
-
-        ``Path.resolve`` follows symlinks, so a link inside the workspace that
-        points outside it is caught here rather than at write time.
-        """
-        candidate = Path(raw_path)
-        target = (candidate if candidate.is_absolute() else self.workspace / candidate).resolve()
-        return target, not target.is_relative_to(self.workspace)
-
     def propose(self, step: PlanStep) -> ProposedAction:
         op = step.params.get("op", "read")
         raw_path = step.params.get("path")
         if not raw_path:
             raise ToolError(f"step {step.index}: file_editor requires a 'path' param")
 
-        target, outside = self._resolve(raw_path)
-        relpath = raw_path if outside else str(target.relative_to(self.workspace))
+        resolved = resolve_in_workspace(self.workspace, raw_path)
+        target, outside, relpath = resolved.path, resolved.escaped, resolved.relpath
 
         if outside:
             action_type = ActionType.PATH_OUTSIDE_WORKSPACE
