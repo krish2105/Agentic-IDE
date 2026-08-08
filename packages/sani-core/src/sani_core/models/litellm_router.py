@@ -52,7 +52,9 @@ class LiteLLMModel(ModelAdapter):
     def __init__(self, model: str | None = None) -> None:
         self.model_name = model or os.environ.get("SANI_MODEL", DEFAULT_MODEL)
 
-    async def plan(self, task: str, workspace: Path, emit_delta: DeltaSink) -> Plan:
+    async def plan(
+        self, task: str, workspace: Path, emit_delta: DeltaSink, context: str = ""
+    ) -> Plan:
         try:
             import litellm
         except ImportError as exc:  # pragma: no cover - depends on optional extra
@@ -61,9 +63,15 @@ class LiteLLMModel(ModelAdapter):
                 "uv sync --extra litellm"
             ) from exc
 
+        prompt = f"Workspace: {workspace}\n\nTask: {task}"
+        if context:
+            prompt += (
+                "\n\nRelevant code retrieved from this repository. Prefer editing "
+                "these files over creating new ones:\n\n" + context
+            )
         messages = [
             {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Workspace: {workspace}\n\nTask: {task}"},
+            {"role": "user", "content": prompt},
         ]
 
         chunks: list[str] = []

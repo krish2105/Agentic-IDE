@@ -37,8 +37,8 @@ TERMINAL_TYPES = {"session.complete", "session.error"}
 MAX_EVENTS = 500
 
 
-def start_session(client, workspace, script, **overrides) -> str:
-    body = {"task": "demo task", "workspace": str(workspace), "script": script}
+def start_session(client, workspace, script, *, task: str = "demo task", **overrides) -> str:
+    body = {"task": task, "workspace": str(workspace), "script": script}
     body.update(overrides)
     response = client.post("/session", json=body)
     assert response.status_code == 201, response.text

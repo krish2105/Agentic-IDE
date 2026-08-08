@@ -19,6 +19,7 @@ from sani_core.events import EventType
 from sani_core.executor import Executor
 from sani_core.models import build_model
 from sani_core.permissions import ActionType, PermissionLocked
+from sani_core.rag import CodebaseIndex
 from sani_core.session import AgentSession, Lifecycle, SessionStatus
 from sani_core.tools import build_tools
 
@@ -67,17 +68,35 @@ def _require_live(record) -> None:
 
 class SessionManager:
     def __init__(
-        self, store: SessionStore | None = None, archive: SessionArchive | None = None
+        self,
+        store: SessionStore | None = None,
+        archive: SessionArchive | None = None,
+        rag: CodebaseIndex | None = None,
     ) -> None:
         self.store = store or MemorySessionStore()
         self.archive: SessionArchive = archive or build_archive()
+        # One index per server, keyed internally by workspace: two sessions on
+        # the same repo share it rather than each paying to build their own.
+        self.rag = rag or CodebaseIndex()
         self._writes: set[asyncio.Task] = set()
 
     def _persist(self, session: AgentSession) -> None:
+        """Queue a snapshot without waiting for it."""
         if self.archive.enabled:
             fire_and_forget(
                 self.archive.snapshot(session.id, session.to_dict()), keep=self._writes
             )
+
+    async def _persist_now(self, session: AgentSession) -> None:
+        """Write a snapshot and wait for it.
+
+        Used at terminal transitions for the same reason the event log is
+        flushed there: another process may read this session the instant it
+        sees session.complete, and a stale snapshot at that moment is
+        indistinguishable from a session that never finished.
+        """
+        if self.archive.enabled:
+            await self.archive.snapshot(session.id, session.to_dict())
 
     async def restore(self) -> int:
         """Rehydrate archived sessions at startup (Phase 3b).
@@ -185,9 +204,24 @@ class SessionManager:
             # Snapshot on every status transition: the archive is what a
             # restarted process and a second server instance read, and a stale
             # snapshot there is indistinguishable from a stuck session.
-            if event.type in SNAPSHOT_ON:
+            if event.is_terminal:
+                await self._persist_now(session)
+            elif event.type in SNAPSHOT_ON:
                 self._persist(session)
             return payload
+
+        async def retrieve(task_text: str) -> tuple[str, list[str]]:
+            """Retrieval is best-effort: an index problem must not fail a run."""
+            try:
+                matches = await self.rag.query(ws, task_text)
+                if not matches:
+                    return "", []
+                return (
+                    await self.rag.context_for(ws, task_text),
+                    [match.chunk.label for match in matches],
+                )
+            except Exception:
+                return "", []
 
         executor = Executor(
             session,
@@ -195,6 +229,7 @@ class SessionManager:
             model=build_model(model_backend, script=script),
             emit=emit,
             registry=ApprovalRegistry(),
+            retriever=retrieve,
         )
         record = SessionRecord(
             session=session, hub=hub, executor=executor, sandbox=sandbox
@@ -268,7 +303,7 @@ class SessionManager:
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 record.task.cancel()
         await record.sandbox.shutdown()
-        self._persist(record.session)
+        await self._persist_now(record.session)
         return record
 
     # ---- views ----

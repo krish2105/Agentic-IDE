@@ -28,6 +28,8 @@ dev = [
     # Optional runtime extras, always present for the test suite so the
     # Redis-backed and RAG paths are exercised rather than merely written.
     "redis>=5.2",
+    "tree-sitter>=0.23",
+    "tree-sitter-language-pack>=0.7",
 ]
 
 [tool.pytest.ini_options]

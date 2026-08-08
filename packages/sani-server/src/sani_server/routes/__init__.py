@@ -3,6 +3,7 @@ from . import (
     diff,
     lifecycle,
     mission_control,
+    rag,
     sessions,
     stream,
     terminal,
@@ -20,6 +21,7 @@ ROUTERS = [
     mission_control.router,
     workspace.router,
     terminal.router,
+    rag.router,
 ]
 
 __all__ = ["ROUTERS"]

@@ -64,8 +64,14 @@ class ScriptedModel(ModelAdapter):
         self.script = script if script is not None else DEFAULT_DEMO_SCRIPT
         self.rationale = rationale
         self.chunk_delay_s = chunk_delay_s
+        self.last_context = ""
 
-    async def plan(self, task: str, workspace: Path, emit_delta: DeltaSink) -> Plan:
+    async def plan(
+        self, task: str, workspace: Path, emit_delta: DeltaSink, context: str = ""
+    ) -> Plan:
+        # Recorded rather than used: the script is fixed, but tests assert that
+        # retrieval actually reached the planner.
+        self.last_context = context
         for word in self.rationale.split(" "):
             await emit_delta(word + " ")
             if self.chunk_delay_s:

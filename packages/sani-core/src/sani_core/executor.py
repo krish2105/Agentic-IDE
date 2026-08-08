@@ -29,6 +29,11 @@ from .tools.base import ToolAdapter, ToolError
 
 EmitFn = Callable[[Event], Awaitable[None]]
 
+#: Given a task, return relevant source from the codebase index plus the labels
+#: of what it found. Empty labels mean "nothing matched" -- indistinguishable
+#: from "no index", and both mean plan without it.
+Retriever = Callable[[str], Awaitable[tuple[str, list[str]]]]
+
 
 class _Killed(Exception):
     """Internal control-flow signal for ``kill()``. Never surfaces to clients."""
@@ -43,11 +48,13 @@ class Executor:
         model: ModelAdapter,
         emit: EmitFn,
         registry: ApprovalRegistry | None = None,
+        retriever: Retriever | None = None,
     ) -> None:
         self.session = session
         self.tools = tools
         self.model = model
         self.registry = registry or ApprovalRegistry()
+        self.retriever = retriever
         self._emit_fn = emit
         self._resume = asyncio.Event()
         self._resume.set()
@@ -88,8 +95,21 @@ class Executor:
     async def run(self) -> None:
         try:
             await self._set_status(SessionStatus.PLANNING)
+
+            context = ""
+            if self.retriever is not None:
+                context, labels = await self.retriever(self.session.task)
+                if labels:
+                    # Disclose what the agent read before it planned. Retrieval
+                    # silently steering a plan is the same opacity problem the
+                    # approval gate exists to solve.
+                    await self._emit(
+                        EventType.RAG_RETRIEVED,
+                        {"chunks": labels, "chars": len(context)},
+                    )
+
             plan = await self.model.plan(
-                self.session.task, self.session.workspace, self._emit_delta
+                self.session.task, self.session.workspace, self._emit_delta, context
             )
             self.session.plan = plan
             self.session.context.add(self.session.task + plan.rationale)

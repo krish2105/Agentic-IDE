@@ -27,5 +27,12 @@ class ModelAdapter(ABC):
     model_name: str = "unknown"
 
     @abstractmethod
-    async def plan(self, task: str, workspace: Path, emit_delta: DeltaSink) -> Plan:
-        """Produce a plan, streaming reasoning through ``emit_delta`` as it goes."""
+    async def plan(
+        self, task: str, workspace: Path, emit_delta: DeltaSink, context: str = ""
+    ) -> Plan:
+        """Produce a plan, streaming reasoning through ``emit_delta`` as it goes.
+
+        ``context`` is retrieved source from the codebase index, empty when
+        there is no index or nothing matched. A planner should treat those two
+        cases identically: plan without it.
+        """

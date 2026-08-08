@@ -17,6 +17,7 @@ PROTOCOL_VERSION = 1
 
 class EventType(str, Enum):
     SESSION_STATUS = "session.status"
+    RAG_RETRIEVED = "rag.retrieved"
     PLAN_PROPOSED = "plan.proposed"
     PLAN_STEP_STARTED = "plan.step.started"
     PLAN_STEP_COMPLETED = "plan.step.completed"
