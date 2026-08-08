@@ -31,15 +31,15 @@ The Section 7 API contract is complete, including the two RAG endpoints.
 
 | Suite | Count | Runs against |
 |---|---|---|
-| Python | **223** | A real `redis-server`, a real Chromium, real WebSocket frames |
-| Shared client | **27** | Real WebSocket to a live server for 3 of them |
-| Playwright | **5** | Real Chromium, real Next build, real API server |
+| Python | **240** | A real `redis-server`, a real Chromium, real WebSocket frames |
+| Shared client | **35** | Real WebSocket to a live server for 3 of them |
+| Playwright | **7** | Real Chromium, real Next build, real API server |
 | VS Code integration | 5 | ⚠️ **never executed** — see below |
 
 ```bash
-uv run pytest          # 223 tests, ~31s
-npm run test:client    # 27 tests; 3 use a live server if one is running
-npm run test:e2e       # 5 browser tests; both servers must be up
+uv run pytest          # 240 tests, ~33s
+npm run test:client    # 35 tests; 3 use a live server if one is running
+npm run test:e2e       # 7 browser tests; both servers must be up
 npm run typecheck      # all three TypeScript workspaces
 ```
 
@@ -131,8 +131,10 @@ its own unverified state rather than letting a caller assume otherwise:
 
 **Known limitations, all deliberate:**
 
-- ⚠️ **No authentication, and the agent runs shell commands.** This is remote
-  code execution if exposed. Localhost only.
+- **Authentication is a single shared token** (`SANI_AUTH_TOKEN`), covering
+  every route and both WebSockets. Unset means open. There is no per-user
+  identity and no revocation short of a restart — enough for your own machine
+  behind a tunnel, not enough to hand to other people.
 - A restored session can be read but not resumed; reviving execution needs a
   worker process, which is not built.
 - Image diffs show an "after" and no "before" — the server retains pre-edit
@@ -210,6 +212,8 @@ verified ones**, on a machine with normal network access. That is the
 difference between demoing something you know works and something you believe
 works.
 
-After that, the two things that would make this deployable rather than
-demoable: authentication, and a worker process so background sessions can
-resume rather than only be read.
+Authentication now exists, so a hosted frontend against a tunnelled backend is
+a defensible arrangement — see [DEPLOYMENT.md](./DEPLOYMENT.md). What is still
+missing for a multi-user product: per-user identity rather than one shared
+token, and a worker process so background sessions can resume rather than only
+be read.

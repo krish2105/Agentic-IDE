@@ -33,13 +33,25 @@ export interface CreateSessionInput {
  * time env var, the extension from a workspace setting -- so the base URL is a
  * parameter and neither surface's mechanism leaks into the shared code.
  */
-export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch) {
+export interface ApiOptions {
+  /** Bearer token, when the server has SANI_AUTH_TOKEN set. */
+  token?: string | null;
+  fetchImpl?: typeof fetch;
+}
+
+export function createApi(baseUrl: string, options: ApiOptions = {}) {
   const server = baseUrl.replace(/\/$/, "");
+  const token = options.token?.trim() || null;
+  const fetchImpl = options.fetchImpl ?? fetch;
 
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetchImpl(server + path, {
       ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
 
     if (!response.ok) {
@@ -61,8 +73,19 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch) {
   return {
     server,
 
+    token,
+
+    /**
+     * A WebSocket URL, with the token in the query string when one is set.
+     *
+     * Browsers cannot set headers on a WebSocket handshake, so this is the
+     * only mechanism available. It does put the token in URLs and access logs;
+     * the alternative was leaving the terminal unauthenticated.
+     */
     wsUrl(path: string): string {
-      return server.replace(/^http/, "ws") + path;
+      const base = server.replace(/^http/, "ws") + path;
+      if (!token) return base;
+      return base + (base.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
     },
 
     createSession: (input: CreateSessionInput) =>
@@ -103,8 +126,11 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch) {
       }),
 
     /** Bytes URL for images -- screenshots and image diffs. */
-    rawFileUrl: (id: string, path: string) =>
-      `${server}/session/${id}/file/raw?path=${encodeURIComponent(path)}`,
+    rawFileUrl: (id: string, path: string) => {
+      // <img src> cannot carry an Authorization header either.
+      const url = `${server}/session/${id}/file/raw?path=${encodeURIComponent(path)}`;
+      return token ? `${url}&token=${encodeURIComponent(token)}` : url;
+    },
 
     ragStatus: (sessionId: string) =>
       request<RagStatus>(`/rag/status?session_id=${encodeURIComponent(sessionId)}`),
@@ -133,7 +159,13 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch) {
       }),
 
     health: () =>
-      request<{ ok: boolean; version: string; protocol_version: number }>("/healthz"),
+      request<{
+        ok: boolean;
+        version: string;
+        protocol_version: number;
+        auth?: { required: boolean; scheme: string };
+        session_store?: { kind: string; durable: boolean };
+      }>("/healthz"),
   };
 }
 

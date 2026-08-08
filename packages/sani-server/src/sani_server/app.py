@@ -15,16 +15,18 @@ from sani_core.events import EventType
 from sani_core.permissions import ALWAYS_CONFIRM, PermissionLocked
 from sani_core.tools import ToolError
 
+from .auth import BearerAuthMiddleware, describe_auth
 from .manager import InvalidState, InvalidWorkspace, SessionManager
 from .routes import ROUTERS
 from .routes.workspace import FileOutsideWorkspace
 from .sandbox import SandboxError
 from .stores import UnknownSession
 
-#: The server has no auth and the shell adapter executes commands, so the
-#: default origins are local development only. Do not widen this without adding
-#: auth. ``SANI_CORS_ORIGINS`` takes a comma-separated list for a non-default
-#: dev port; "*" is deliberately not special-cased.
+#: Local development by default. Widening this is only safe together with
+#: ``SANI_AUTH_TOKEN`` -- the shell adapter executes commands, so an origin that
+#: can reach this server unauthenticated can run code on it.
+#: ``SANI_CORS_ORIGINS`` takes a comma-separated list; "*" is deliberately not
+#: special-cased.
 DEFAULT_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
 CORS_ORIGINS_ENV_VAR = "SANI_CORS_ORIGINS"
 
@@ -62,6 +64,11 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.manager = manager or SessionManager()
+
+    # Auth is added first so it wraps *outside* CORS: an unauthenticated request
+    # should be refused before anything else looks at it, and the preflight
+    # exemption inside the middleware keeps browsers able to see the 401.
+    app.add_middleware(BearerAuthMiddleware)
 
     app.add_middleware(
         CORSMiddleware,
@@ -122,6 +129,9 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
             "event_types": [e.value for e in EventType],
             "always_confirm": sorted(a.value for a in ALWAYS_CONFIRM),
             "session_store": app.state.manager.archive.describe(),
+            # Lets a client tell "no token needed" apart from "your token was
+            # wrong" without having to guess from a 401.
+            "auth": describe_auth(),
         }
 
     return app

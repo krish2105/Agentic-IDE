@@ -15,8 +15,8 @@ trust a session has accumulated.
 VS Code extension, codebase RAG, Redis-backed persistence, browser subagent,
 and the trust/Mission Control UI.
 
-**255 tests:** 223 Python (against a real Redis and a real Chromium), 27
-shared-client (3 against a live server), 5 Playwright driving a real browser
+**282 tests:** 240 Python (against a real Redis and a real Chromium), 35
+shared-client (3 against a live server), 7 Playwright driving a real browser
 against real servers.
 
 | Phase | Scope | Status |
@@ -47,8 +47,8 @@ anything runs. Interactive API docs at `http://127.0.0.1:8000/docs`.
 Prefer a terminal? `uv run python scripts/ws_client.py --workspace /tmp/demo`
 streams the same session and prompts for approvals inline.
 
-⚠️ There is no authentication and the shell tool executes commands. Run it on
-localhost only.
+⚠️ The shell tool executes commands. Set `SANI_AUTH_TOKEN` if the server is
+reachable by anything other than your own machine; unset, it is open.
 
 ## Tests
 

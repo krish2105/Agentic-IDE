@@ -3,8 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { ConnectionPanel } from "@/components/ConnectionPanel";
 import { StatusPill } from "@/components/StatusBar";
-import { ApiError, api } from "@/lib/client";
+import {
+  ApiError,
+  api,
+  currentConnection,
+  diagnose,
+  explainProblem,
+  onConnectionChange,
+} from "@/lib/client";
 import type { MissionControlRow } from "@sani/client";
 
 const POLL_MS = 2000;
@@ -69,6 +77,9 @@ export default function MissionControl() {
   const [rows, setRows] = useState<MissionControlRow[]>([]);
   const [summary, setSummary] = useState({ active: 0, awaiting: 0, store: "memory" });
   const [offline, setOffline] = useState(false);
+  const [status, setStatus] = useState<number | null>(null);
+  const [showConnection, setShowConnection] = useState(false);
+  const [server, setServer] = useState("");
 
   const refresh = useCallback(async () => {
     try {
@@ -80,16 +91,30 @@ export default function MissionControl() {
         store: board.store?.kind ?? "memory",
       });
       setOffline(false);
-    } catch {
+    } catch (caught) {
+      // A 401 is a different problem from an unreachable server, and telling
+      // them apart is the difference between "start the server" and "paste
+      // your token".
+      setStatus(caught instanceof ApiError ? caught.status : null);
       setOffline(true);
     }
   }, []);
 
   useEffect(() => {
+    setServer(currentConnection().server);
     refresh();
     const timer = setInterval(refresh, POLL_MS);
-    return () => clearInterval(timer);
+    const unsubscribe = onConnectionChange(() => {
+      setServer(currentConnection().server);
+      refresh();
+    });
+    return () => {
+      clearInterval(timer);
+      unsubscribe();
+    };
   }, [refresh]);
+
+  const problem = diagnose(server, status);
 
   return (
     <main className="h-full overflow-auto bg-base">
@@ -103,11 +128,39 @@ export default function MissionControl() {
         </header>
 
         {offline && (
-          <div className="mb-6 rounded border border-danger/40 bg-danger/10 px-4 py-3 text-xs text-danger">
-            Cannot reach the server. Start it with{" "}
-            <code className="font-mono">uv run uvicorn sani_server.app:app --port 8000</code>.
+          <div
+            className="mb-6 rounded border border-danger/40 bg-danger/10 px-4 py-3 text-xs leading-relaxed text-danger"
+            data-testid="offline-banner"
+          >
+            {explainProblem(problem, server)}
+            {/* Only suggest starting a local server when a local server is
+                actually what this page is trying to reach. On a hosted page
+                that advice sends people to fix the wrong thing. */}
+            {problem === "unreachable" && (
+              <>
+                {" "}
+                If it should be local, start it with{" "}
+                <code className="font-mono">
+                  uv run uvicorn sani_server.app:app --port 8000
+                </code>
+                .
+              </>
+            )}
+            <button
+              onClick={() => setShowConnection(true)}
+              data-testid="open-connection"
+              className="ml-2 underline hover:no-underline"
+            >
+              Change connection
+            </button>
           </div>
         )}
+
+        <ConnectionPanel
+          open={showConnection}
+          onClose={() => setShowConnection(false)}
+          onSaved={refresh}
+        />
 
         <div className="mb-8">
           <NewSessionForm onCreated={(id) => router.push(`/session/${id}`)} />
@@ -123,8 +176,16 @@ export default function MissionControl() {
               <span className="text-attention"> · {summary.awaiting} awaiting you</span>
             )}
           </span>
+          <button
+            onClick={() => setShowConnection((value) => !value)}
+            data-testid="connection-toggle"
+            className="ml-auto font-mono text-[11px] text-ink-faint hover:text-ink"
+            title={server}
+          >
+            {server.replace(/^https?:\/\//, "")}
+          </button>
           <span
-            className="ml-auto font-mono text-[11px] text-ink-faint"
+            className="font-mono text-[11px] text-ink-faint"
             title={
               summary.store === "redis"
                 ? "Sessions survive a server restart"

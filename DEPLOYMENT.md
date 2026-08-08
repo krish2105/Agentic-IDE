@@ -6,18 +6,18 @@ How to stand it up, how to use every feature, and where you must not put it.
 
 ## Read this first
 
-⚠️ **The server has no authentication and the agent executes shell commands.**
-Anyone who can reach the API can run arbitrary code as the user running the
-server, read any file the workspace check allows, and open a shell over a
-WebSocket. There is no token, no session cookie, no rate limit.
+⚠️ **The agent executes shell commands.** Anyone who can reach the API without
+a token can run arbitrary code as the user running the server and open a shell
+over a WebSocket.
 
-That single fact governs the whole deployment story: **bind it to localhost, or
-put your own authentication in front of it.** There is no configuration flag
-that makes public exposure safe, and `SANI_SANDBOX=docker` does not change the
-answer — it reduces what the *agent* can reach, not who can reach the *API*.
+The server now supports authentication — set **`SANI_AUTH_TOKEN`** and every
+HTTP route and both WebSocket upgrades require a bearer token. **If the server
+is reachable by anything other than your own machine, set it.** Leaving it
+unset keeps the old behaviour (open), which is fine on loopback and nowhere
+else.
 
-The rest of this document assumes you accept that and are running it as a local
-developer tool, which is what it is.
+`SANI_SANDBOX=docker` is not a substitute: it limits what the *agent* reaches,
+not who reaches the *API*.
 
 ---
 
@@ -223,6 +223,7 @@ Every setting, with its default.
 
 | Variable | Default | What it does |
 |---|---|---|
+| `SANI_AUTH_TOKEN` | unset (open) | Bearer token required on every route and both WebSockets |
 | `SANI_MODEL_BACKEND` | `scripted` | `scripted` or `litellm` |
 | `SANI_MODEL` | `groq/llama-3.3-70b-versatile` | LiteLLM planner model |
 | `SANI_SESSION_STORE` | `memory` | `memory` or `redis` |
@@ -239,8 +240,11 @@ Every setting, with its default.
 | `SANI_BROWSER_EXECUTABLE` | auto-detected | Chromium path override |
 | `NEXT_PUBLIC_SANI_SERVER` | `http://127.0.0.1:8000` | **Build-time**, web IDE only |
 
-**`NEXT_PUBLIC_SANI_SERVER` is inlined when the web app is built.** Changing
-the API port means rebuilding, not just restarting.
+**`NEXT_PUBLIC_SANI_SERVER` is only a default.** It is inlined at build time,
+but the UI can point somewhere else at runtime — click the server URL in the
+Mission Control header, or *Change connection* on the error banner. The value
+is stored in that browser, so one hosted build can serve any backend without a
+rebuild.
 
 **Set `SANI_WORKSPACE_ROOT` for anything but casual local use.** Unset, any
 existing directory is an acceptable workspace (minus a small list of system
@@ -250,54 +254,100 @@ paths — a typo guard, not a security boundary).
 
 ## 5. Deploying it somewhere
 
-### The honest version
+### Why a hosted frontend shows "cannot reach the server"
 
-The spec assumed Vercel for the frontend and Fly.io for the backend. The
-frontend half is fine: it is a client that talks to whatever API URL you build
-it against. **The backend half is not deployable to the public internet as it
-stands**, and no amount of configuration changes that.
+Deploy `apps/web` to Vercel and it will say that immediately. Three separate
+reasons, and fixing one without the others changes nothing:
 
-Three arrangements that are actually defensible:
+1. **The bundle points at loopback.** `NEXT_PUBLIC_SANI_SERVER` is inlined at
+   build time. Built without it, the page calls `http://127.0.0.1:8000` — which
+   in a visitor's browser means *their own machine*. No server you start
+   anywhere will satisfy it.
+2. **CORS only allows `localhost:3000`.** Your Vercel origin is not on the list.
+3. **Nothing is listening on the public internet**, because the backend is on
+   your laptop.
 
-**A. Localhost only — recommended.** What everything above describes. Nothing
-listens beyond your machine.
+The page now diagnoses which of these it is instead of always telling you to
+run uvicorn.
 
-**B. A private machine plus a tunnel.** Run the backend on a VM bound to
-`127.0.0.1`, reach it over SSH port-forwarding or a private overlay network
-(Tailscale, WireGuard). Nothing is published; authentication is your tunnel's.
+### The arrangement that actually works
+
+Frontend on Vercel, backend on your machine, reached over an HTTPS tunnel, with
+a token. Four steps.
+
+**1 — Start the backend with a token.**
+
+```bash
+export SANI_AUTH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+echo "$SANI_AUTH_TOKEN"          # you will paste this into the UI
+
+SANI_CORS_ORIGINS=https://your-app.vercel.app \
+SANI_WORKSPACE_ROOT=$HOME/code \
+uv run uvicorn sani_server.app:app --host 127.0.0.1 --port 8000
+```
+
+**2 — Expose it over HTTPS.** A plain `http://` tunnel will not work: the page
+is HTTPS and the browser blocks mixed content.
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:8000
+# or: ngrok http 8000
+```
+
+Both print an `https://…` URL. Whatever it is, set `SANI_CORS_ORIGINS` to your
+Vercel origin (step 1) — not to the tunnel URL.
+
+**3 — Point the UI at it.** No rebuild needed. Open your Vercel app, click the
+server URL in the Mission Control header (or *Change connection* on the error
+banner), paste the tunnel URL and the token, save.
+
+**4 — Confirm.** The banner disappears and the header shows your tunnel host.
+
+To bake in the default instead, set `NEXT_PUBLIC_SANI_SERVER` in Vercel's
+environment variables and redeploy — but the runtime setting still wins, which
+is what makes one build usable against a tunnel URL that changes every restart.
+
+### Understand what you have just done
+
+That tunnel publishes a code-execution service to the internet, protected by
+one shared token. That is a real step up from no auth, and it is still not a
+multi-user system:
+
+- One token for everybody; no per-user identity, no revocation short of
+  restarting with a new token.
+- The token rides in the query string for WebSockets, because browsers cannot
+  set headers on a handshake. It will appear in tunnel access logs.
+- No rate limiting, and the workspace check is the only containment on the
+  file API.
+
+Reasonable: your own machine, your own repos, a tunnel you shut down when you
+are done. Not reasonable: leaving it up, or handing the URL to other people.
+For that you want per-user auth, `SANI_WORKSPACE_ROOT` per user, and
+`SANI_SANDBOX=docker`.
+
+### Other arrangements
+
+**Localhost only — still the best option.** Run the web IDE locally too and
+none of the above applies.
+
+**Private network.** Backend bound to `127.0.0.1`, reached over SSH forwarding
+or Tailscale. Nothing is published and the tunnel is the authentication.
 
 ```bash
 ssh -N -L 8000:127.0.0.1:8000 you@your-vm
 ```
 
-**C. Behind an authenticating reverse proxy.** Only if you add real auth. At
-minimum you need: an identity check on every HTTP route *and* on both WebSocket
-upgrades (`/stream` and `/terminal` — a proxy that only guards HTTP leaves the
-terminal wide open), per-user workspace isolation via `SANI_WORKSPACE_ROOT`,
-and `SANI_SANDBOX=docker` so the agent's shell is contained. That is a real
-piece of work, not a config change, and it is the single largest thing standing
-between this and a hostable product.
-
-### If you do run it on a server
+**A real server.** Bind loopback, confine workspaces, persist sessions, and put
+an authenticating proxy in front that guards **both WebSocket upgrades**, not
+just the HTTP routes — a proxy that only covers HTTP leaves `/terminal` open.
 
 ```bash
-# systemd-style: bind loopback, confine workspaces, persist sessions
+SANI_AUTH_TOKEN=... \
 SANI_SESSION_STORE=redis \
 SANI_WORKSPACE_ROOT=/srv/sani/workspaces \
 SANI_SANDBOX=docker \
 uv run uvicorn sani_server.app:app --host 127.0.0.1 --port 8000
 ```
-
-Then build the web IDE against whatever URL the browser will actually use:
-
-```bash
-NEXT_PUBLIC_SANI_SERVER=https://sani.internal.example npm run build --workspace sani-web
-npx next start -p 3000
-```
-
-and set `SANI_CORS_ORIGINS` to that frontend's origin.
-
----
 
 ## 6. Verify it yourself
 
@@ -324,9 +374,11 @@ spend — it converts "believed to work" into "known to work".
 
 ## 7. Troubleshooting
 
-**Web IDE says it cannot reach the server.** The API is down, or the web app
-was built against a different URL. `NEXT_PUBLIC_SANI_SERVER` is baked in at
-build time — rebuild after changing it.
+**Web IDE says it cannot reach the server.** Read the banner — it now names
+the cause. "Your own machine" means a hosted page is calling loopback: use a
+tunnel URL. "Blocks the request" means HTTP backend behind an HTTPS page: use
+an `https://` tunnel. "Rejected this request" means the token is missing or
+wrong. Click *Change connection* to fix any of them without redeploying.
 
 **Requests blocked by CORS.** The web IDE is on a port other than 3000. Set
 `SANI_CORS_ORIGINS` to its exact origin.

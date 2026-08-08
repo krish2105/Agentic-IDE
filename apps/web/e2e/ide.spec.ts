@@ -212,6 +212,42 @@ test.describe("Ṣāni' Studio web IDE", () => {
     expect(existsSync(join(workspace, "scratch.tmp"))).toBe(true);
   });
 
+  test("the backend URL is changeable at runtime, without a rebuild", async ({ page }) => {
+    // The failure a hosted deploy hits: the bundle was compiled against one
+    // backend URL and there is no way to point it somewhere else. There is now.
+    await page.goto("/");
+    await expect(page.getByTestId("session-list").or(page.getByText("No sessions yet"))).toBeVisible();
+
+    // Point it at a port with nothing on it.
+    await page.getByTestId("connection-toggle").click();
+    await page.getByTestId("connection-server").fill("http://127.0.0.1:9");
+    await page.getByTestId("connection-save").click();
+
+    const banner = page.getByTestId("offline-banner");
+    await expect(banner).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toContainText("127.0.0.1:9");
+
+    // Point it back, without reloading or rebuilding anything.
+    await page.getByTestId("open-connection").click();
+    await page.getByTestId("connection-server").fill(SERVER);
+    await page.getByTestId("connection-save").click();
+
+    await expect(banner).toBeHidden({ timeout: 15_000 });
+    await expect(page.getByTestId("board-summary")).toContainText("total");
+  });
+
+  test("the configured backend survives a reload", async ({ page }) => {
+    await page.goto("/");
+    await page.getByTestId("connection-toggle").click();
+    await page.getByTestId("connection-server").fill(SERVER);
+    await page.getByTestId("connection-save").click();
+
+    await page.reload();
+    await expect(page.getByTestId("connection-toggle")).toContainText(
+      SERVER.replace(/^https?:\/\//, ""),
+    );
+  });
+
   test("a human edit in Monaco saves back to the workspace", async ({ page }) => {
     const workspace = makeWorkspace();
 

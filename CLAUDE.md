@@ -245,6 +245,25 @@ tool holds a whole Chromium; the executor calls it whenever a session ends.
 
 ---
 
+## Authentication
+
+`SANI_AUTH_TOKEN` unset (default) leaves the server open; set, it requires
+`Authorization: Bearer <token>` on every route except `/healthz`.
+
+**It is pure ASGI middleware, deliberately.** FastAPI dependencies and
+`BaseHTTPMiddleware` never see WebSocket connections, so guarding only the HTTP
+routes would leave `/stream` and `/terminal` open — and `/terminal` is a shell.
+Anything that authenticates this server must sit below the protocol split.
+
+Browsers cannot set headers on a WebSocket handshake, so sockets accept
+`?token=`. That puts the token in access logs; the alternative was an
+unauthenticated terminal. `rawFileUrl` does the same, for `<img src>`.
+
+`/healthz` reports `auth.required` so a client can tell "no token needed" from
+"your token was wrong".
+
+---
+
 ## Event protocol (v1)
 
 Every frame:
@@ -437,10 +456,11 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
 
 ## Known limits
 
-- ⚠️ **No authentication, and the shell adapter executes commands.** This is
-  remote code execution if exposed. Bind localhost only. Do not deploy this
-  anywhere reachable until auth exists. CORS defaults to `localhost:3000`;
-  `SANI_CORS_ORIGINS` widens it and should not be used to reach the internet.
+- ⚠️ **The shell adapter executes commands.** `SANI_AUTH_TOKEN` gates every
+  route and both WebSocket upgrades; **unset means open**, which is only
+  acceptable on loopback. One shared token, no per-user identity, no
+  revocation short of a restart — enough for your own machine behind a tunnel,
+  not enough for other people. CORS defaults to `localhost:3000`.
 - The file API and the terminal inherit that: both operate as the server user,
   and the only containment is the workspace path check.
 - Monaco bundles a `dompurify` with one low and one moderate advisory (hover
