@@ -62,6 +62,9 @@ def test_always_confirm_set_matches_the_spec():
         "dependency.new",
         "secret.access",
         "path.outside_workspace",
+        # Phase 3c: not in Section 5, which predates the browser tool. Adding
+        # to this tier is stricter than the spec; removing would not be.
+        "browser.navigate_external",
     }
     assert not (ALWAYS_CONFIRM & AUTO_FROM_START), "no action can be in both tiers"
 

@@ -11,12 +11,16 @@ from pathlib import Path
 
 from ..runners import CommandRunner
 from .base import ToolAdapter, ToolError
+from .browser import BrowserTool
 from .file_editor import FileEditorTool
 from .shell import ShellTool
 
 REGISTRY: dict[str, type[ToolAdapter]] = {
     FileEditorTool.name: FileEditorTool,
     ShellTool.name: ShellTool,
+    # Phase 3c. Implements the same three methods as the others and needed no
+    # executor changes, which was the point of the interface.
+    BrowserTool.name: BrowserTool,
 }
 
 
@@ -29,4 +33,12 @@ def build_tools(
     return {name: REGISTRY[name](workspace, runner=runner) for name in names}
 
 
-__all__ = ["REGISTRY", "FileEditorTool", "ShellTool", "ToolAdapter", "ToolError", "build_tools"]
+__all__ = [
+    "REGISTRY",
+    "BrowserTool",
+    "FileEditorTool",
+    "ShellTool",
+    "ToolAdapter",
+    "ToolError",
+    "build_tools",
+]

@@ -257,7 +257,16 @@ class Executor:
             if step.status in (StepStatus.PENDING, StepStatus.RUNNING):
                 step.status = StepStatus.SKIPPED
 
+    async def _close_tools(self) -> None:
+        for tool in self.tools.values():
+            try:
+                await tool.aclose()
+            except Exception:
+                # Teardown failures must not change how a session ended.
+                pass
+
     async def _finish(self, status: SessionStatus) -> None:
+        await self._close_tools()
         self.session.status = status
         self.session.ended_at = time.time()
         self.session.pending_action = None

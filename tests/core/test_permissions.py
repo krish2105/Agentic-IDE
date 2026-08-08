@@ -87,4 +87,4 @@ def test_serialised_tiers_never_advertise_a_locked_tier_as_automatic():
 
 def test_the_two_tiers_are_disjoint_and_cover_the_spec():
     assert not (ALWAYS_CONFIRM & AUTO_FROM_START)
-    assert len(ALWAYS_CONFIRM) == 6
+    assert len(ALWAYS_CONFIRM) == 7  # Section 5's six, plus browser navigation

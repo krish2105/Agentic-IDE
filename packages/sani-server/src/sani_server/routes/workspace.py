@@ -11,7 +11,10 @@ open file is the baseline interaction of an IDE, not an action to be reviewed.
 
 from __future__ import annotations
 
+import mimetypes
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sani_core.workspace import MAX_EDITABLE_BYTES, build_tree, is_probably_binary, resolve_in_workspace
 
@@ -75,6 +78,30 @@ async def read_file(
         "too_large": False,
         "content": resolved.path.read_text(encoding="utf-8", errors="replace"),
     }
+
+
+@router.get("/session/{session_id}/file/raw")
+async def read_file_raw(
+    session_id: str,
+    path: str = Query(description="Path relative to the session workspace"),
+    manager: SessionManager = Depends(get_manager),
+):
+    """Serve a file's bytes.
+
+    Exists for the things text cannot carry: browser screenshots and image
+    diffs. Same containment check as everything else -- a request for bytes is
+    not a reason to leave the workspace.
+    """
+    _, resolved = _resolve(manager, session_id, path)
+    if not resolved.path.is_file():
+        raise InvalidState(f"{path} is not a file")
+
+    media_type, _ = mimetypes.guess_type(resolved.path.name)
+    return FileResponse(
+        resolved.path,
+        media_type=media_type or "application/octet-stream",
+        filename=resolved.path.name,
+    )
 
 
 @router.put("/session/{session_id}/file")

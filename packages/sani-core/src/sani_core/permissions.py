@@ -32,6 +32,10 @@ class ActionType(str, Enum):
     GIT_HISTORY_REWRITE = "git.history_rewrite"
     DEPENDENCY_LOCKED = "dependency.locked"
     DEPENDENCY_NEW = "dependency.new"
+    # Phase 3c. Local interaction earns trust like any other action; navigating
+    # off-machine reaches the network and joins the always-confirm tier.
+    BROWSER_ACTION = "browser.action"
+    BROWSER_NAVIGATE_EXTERNAL = "browser.navigate_external"
 
 
 #: Spec Section 5, verbatim: "Always requires explicit confirmation, no
@@ -44,6 +48,11 @@ ALWAYS_CONFIRM: frozenset[ActionType] = frozenset(
         ActionType.DEPENDENCY_NEW,
         ActionType.SECRET_ACCESS,
         ActionType.PATH_OUTSIDE_WORKSPACE,
+        # Not in Section 5's list, which predates the browser tool. Added
+        # because driving a browser to an external URL has the same blast
+        # radius as curl -- it reaches the network and can act on remote
+        # systems. Extending this tier is stricter than the spec, never weaker.
+        ActionType.BROWSER_NAVIGATE_EXTERNAL,
     }
 )
 

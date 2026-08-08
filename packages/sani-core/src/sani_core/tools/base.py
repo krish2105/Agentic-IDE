@@ -44,3 +44,10 @@ class ToolAdapter(ABC):
     @abstractmethod
     def result(self, action: ProposedAction, raw: Any) -> ToolResult:
         """Normalise raw output into the shape clients render."""
+
+    async def aclose(self) -> None:
+        """Release anything the adapter holds open.
+
+        Most tools hold nothing; the browser holds a whole Chromium. Called by
+        the executor when a session ends, however it ends.
+        """
