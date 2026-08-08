@@ -1,0 +1,127 @@
+{
+  "name": "sani-vscode",
+  "displayName": "\u1e62\u0101ni' Studio",
+  "description": "Agentic coding sessions with visible autonomy: plan preview, tool-call disclosure, per-action approval",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "krish2105",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sani",
+          "title": "\u1e62\u0101ni' Studio",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sani": [
+        {
+          "type": "webview",
+          "id": "sani.sidebar",
+          "name": "Session"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sani.newSession",
+        "title": "\u1e62\u0101ni': New Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sani.missionControl",
+        "title": "\u1e62\u0101ni': Mission Control"
+      },
+      {
+        "command": "sani.attachSession",
+        "title": "\u1e62\u0101ni': Attach to Session"
+      },
+      {
+        "command": "sani.approve",
+        "title": "\u1e62\u0101ni': Approve Pending Action"
+      },
+      {
+        "command": "sani.reject",
+        "title": "\u1e62\u0101ni': Reject Pending Action"
+      },
+      {
+        "command": "sani.showDiff",
+        "title": "\u1e62\u0101ni': Show Diff for File"
+      },
+      {
+        "command": "sani.pause",
+        "title": "\u1e62\u0101ni': Pause Session"
+      },
+      {
+        "command": "sani.resume",
+        "title": "\u1e62\u0101ni': Resume Session"
+      },
+      {
+        "command": "sani.kill",
+        "title": "\u1e62\u0101ni': Kill Session"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sani.newSession",
+          "when": "view == sani.sidebar",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "\u1e62\u0101ni' Studio",
+      "properties": {
+        "sani.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8000",
+          "description": "Base URL of the \u1e62\u0101ni' server. The server has no authentication, so this should stay on localhost."
+        },
+        "sani.showGutterMarks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Mark agent-authored lines in the editor gutter."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "npx --yes @vscode/vsce@^3.2.0 package --no-dependencies -o sani-studio.vsix",
+    "test:vscode": "xvfb-run -a vscode-test"
+  },
+  "dependencies": {
+    "@sani/client": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.7.5",
+    "@types/vscode": "^1.90.0",
+    "@types/ws": "^8.5.13",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.24.0",
+    "mocha": "^10.8.2",
+    "typescript": "^5.6.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krish2105/Agentic-IDE.git"
+  }
+}

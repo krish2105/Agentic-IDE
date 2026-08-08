@@ -7,8 +7,8 @@ import { FileTree } from "@/components/FileTree";
 import { RightDock } from "@/components/RightDock";
 import { StatusBar } from "@/components/StatusBar";
 import { TerminalPanel } from "@/components/TerminalPanel";
-import { api } from "@/lib/api";
-import type { FileEntry, Session } from "@/lib/types";
+import { api } from "@/lib/client";
+import type { FileEntry, Session } from "@sani/client";
 import { useSessionStream } from "@/lib/useSessionStream";
 
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }) {

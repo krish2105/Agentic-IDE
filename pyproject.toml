@@ -12,7 +12,9 @@ dependencies = [
 package = false
 
 [tool.uv.workspace]
-members = ["packages/*"]
+# Listed rather than globbed: packages/ also holds the shared TypeScript client,
+# which uv would otherwise try to read as a Python project.
+members = ["packages/sani-core", "packages/sani-server"]
 
 [tool.uv.sources]
 sani-core = { workspace = true }

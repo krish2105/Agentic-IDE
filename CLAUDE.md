@@ -1,9 +1,10 @@
 # Ṣāni' Studio — project memory
 
 A dual-client agentic IDE (VS Code extension + web IDE) over one Python backend.
-**Phases 0 and 1 are complete:** the agent core, the FastAPI server with
-WebSocket streaming and approval gating, and the Next.js web IDE. The VS Code
-extension (Phase 2) does not exist yet.
+**Phases 0, 1 and 2 are complete:** the agent core, the FastAPI server with
+WebSocket streaming and approval gating, the Next.js web IDE, and the VS Code
+extension. ⚠️ The extension has never run inside a real editor — see
+`apps/vscode/TESTING.md`.
 
 Read this before changing the server. The API contract and the safety model
 below are consumed by both clients; changing either is a breaking change for
@@ -16,33 +17,45 @@ every surface at once.
 ```
 packages/sani-core/     agent engine — zero required third-party deps
 packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
-tests/core/             unit tests
-tests/server/           API + WebSocket end-to-end tests
+packages/sani-client/   shared TypeScript client — wire types, reducer, API
+tests/core|server/      Python unit and API tests
 scripts/ws_client.py    manual stream viewer against a live server
 apps/web/               Next.js web IDE (Phase 1)
 apps/web/e2e/           Playwright tests — real browser against real servers
-apps/vscode/            not started (Phase 2)
+apps/vscode/            VS Code extension (Phase 2)
 ```
 
-`sani-core` must never import a web framework. That constraint is what lets the
-same engine back the server, a CLI, and the test harness, and it is the whole
-basis of the "one backend, two surfaces" claim. Anything HTTP- or WS-shaped
-belongs in `sani-server`.
+Two package managers: `uv` owns the Python workspace, npm workspaces own the
+TypeScript one. The uv members are listed explicitly rather than globbed,
+because `packages/` also holds a TypeScript package.
 
-The web IDE holds no business logic. If a client needs to compute something
-about session state, that computation belongs in the Session Manager.
+**Three rules keep the architecture honest:**
+
+1. `sani-core` must never import a web framework, so the same engine backs the
+   server, a CLI, and the tests. Anything HTTP- or WS-shaped goes in
+   `sani-server`.
+2. **Both clients read a session through `@sani/client`.** The reducer, the
+   reconnect logic, and the diff reconstruction live there once. A bug is one
+   bug rather than two surfaces that disagree — which is the only thing that
+   makes "shared component bundle" more than a slide.
+3. Clients hold no business logic. If a client needs to compute something about
+   session state, that computation belongs in the Session Manager.
 
 ## Commands
 
 ```bash
-uv sync                                          # install workspace
+uv sync                                          # install the Python workspace
+npm install                                      # install all TS workspaces (root)
+
 uv run pytest                                    # 162 tests, ~8s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
-uv run uvicorn sani_server.app:app --port 8000   # run the server
-uv run python scripts/ws_client.py --workspace /tmp/demo --approve-all
+npm run test:client                              # 27 shared-client tests
+npm run test:e2e                                 # Playwright, needs both servers up
+npm run typecheck                                # all three TS workspaces
 
-cd apps/web && npm install && npm run dev        # web IDE on :3000
-cd apps/web && npx playwright test               # e2e — see apps/web/e2e/README.md
+uv run uvicorn sani_server.app:app --port 8000   # the server
+npm run dev --workspace sani-web                 # web IDE on :3000
+npm run build:vscode && npm run package:vscode   # extension + VSIX
 ```
 
 ---
@@ -302,6 +315,20 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
 
 ---
 
+## VS Code extension notes
+
+- **The extension host owns the WebSocket, not the webview.** A webview is
+  disposed whenever the sidebar is hidden, which would drop the stream every
+  time the user looks elsewhere. The webview is a pure renderer that receives
+  `StreamState` and posts intents back.
+- **Diffs go through `vscode.diff`,** not a webview reimplementation. The
+  "before" side comes from `reconstructOriginal(currentFile, diff)` in
+  `@sani/client` — the server sends hunks with context, not whole-file
+  snapshots, so the original is derived rather than fetched.
+- **`activate` returns `{ controller, openDiff }`** so integration tests can
+  drive the real extension instead of reaching into module internals.
+- ⚠️ **Never run inside a real editor.** See `apps/vscode/TESTING.md`.
+
 ## Web IDE notes
 
 - **One accent, one meaning.** `--color-agent` (violet) marks agent-authored
@@ -310,9 +337,11 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
   whole point is that a glance separates human origin from agent origin.
 - **Monaco is served from `/monaco`, not a CDN.** `scripts/copy-monaco.mjs`
   runs on `predev`/`prebuild`. `public/monaco/` is gitignored (24 MB).
-- **The stream hook owns reconnection.** `useSessionStream` reopens with
-  `?from_seq=<lastSeq>` and drops any event whose seq it has already applied,
-  so an overlapping replay is idempotent.
+- **`useSessionStream` is only a React adapter** over `SessionStream` from
+  `@sani/client`; the reconnect-from-`lastSeq` behaviour lives there and is
+  shared with the extension.
+- **`NEXT_PUBLIC_SANI_SERVER` is the one Next-specific thing in the client
+  layer**, isolated in `lib/client.ts`. It is inlined at build time.
 - **An open tab reloads when the agent rewrites the file underneath it, unless
   the human has unsaved edits.** Silently discarding those would be theft.
 
@@ -364,9 +393,10 @@ React 19.
 
 ## Next
 
-Phase 2 (VS Code extension) consumes the same contract through a shared webview
-bundle. Phase 3 adds RAG; 3a–3c add the Session Manager, Redis-backed
-background sessions, and the browser subagent.
+Phase 3 adds RAG (pgvector + tree-sitter); 3a–3c add the Session Manager,
+Redis-backed background sessions, and the browser subagent. The browser adapter
+implements the same three `ToolAdapter` methods and needs no executor changes.
 
-Two pieces of open work worth clearing first: routing the agent's shell tool
-through the sandbox, and verifying `DockerSandbox` against a live daemon.
+Two verification debts to clear when the network allows: run the VS Code
+integration suite against a real editor, and `DockerSandbox` against a live
+daemon. Both are written and wired; neither has executed.

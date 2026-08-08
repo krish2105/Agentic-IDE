@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import type { FileEntry } from "@/lib/types";
+import type { FileEntry } from "@sani/client";
 
 interface Props {
   entries: FileEntry[];

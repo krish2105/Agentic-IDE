@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ContextUsage, SessionStatus } from "@/lib/types";
+import type { ContextUsage, SessionStatus } from "@sani/client";
 
 const STATUS_STYLES: Record<SessionStatus, string> = {
   planning: "bg-edge text-ink-dim",

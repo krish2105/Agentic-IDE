@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // The IDE is a single long-lived client surface; nothing here is statically
-  // renderable, so there is no reason to pay for prerender attempts.
-  experimental: {},
+  // @sani/client ships TypeScript source rather than a build artifact, so Next
+  // has to compile it the same way it compiles this app.
+  transpilePackages: ["@sani/client"],
 };
 
 export default nextConfig;

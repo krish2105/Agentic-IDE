@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { StatusPill } from "@/components/StatusBar";
-import { ApiError, api } from "@/lib/api";
-import type { MissionControlRow } from "@/lib/types";
+import { ApiError, api } from "@/lib/client";
+import type { MissionControlRow } from "@sani/client";
 
 const POLL_MS = 2000;
 

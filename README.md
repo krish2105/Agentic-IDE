@@ -11,15 +11,16 @@ trust a session has accumulated.
 
 ## Status
 
-**Phases 0 and 1 complete.** Agent core, FastAPI server with WebSocket
-streaming and approval gating, and a working web IDE. 162 Python tests plus 3
-Playwright end-to-end tests that drive a real browser against real servers.
+**Phases 0, 1 and 2 complete.** Agent core, FastAPI server with WebSocket
+streaming and approval gating, a working web IDE, and a VS Code extension.
+162 Python tests, 27 shared-client tests (3 against a live server), and 3
+Playwright tests driving a real browser against real servers.
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Agent core, FastAPI server, WebSocket streaming, approval endpoint | ✅ |
 | 1 | Web IDE — Monaco, file tree, sandbox, xterm.js, chat panel | ✅ |
-| 2 | VS Code extension — webview chat, native diff integration | — |
+| 2 | VS Code extension — sidebar, native diff, gutter marks | ✅\* |
 | 3 | Codebase RAG — pgvector + tree-sitter | — |
 | 3a–3c | Session Manager, background agents, browser subagent | — |
 | 4 | Trust ladder UI, design system, image diffs | — |
@@ -56,9 +57,15 @@ cd apps/web && npx playwright test   # 3 e2e tests, real browser + real servers
 ```
 packages/sani-core/     agent engine — planning, permissions, tools, execution
 packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
+packages/sani-client/   shared TypeScript client — both surfaces read sessions
+                        through the same reducer, so they cannot drift
 apps/web/               Next.js web IDE — Monaco, xterm.js, chat/plan/diffs dock
-apps/vscode/            VS Code extension (Phase 2)
+apps/vscode/            VS Code extension — sidebar, native diff, gutter marks
 ```
+
+\* The extension compiles, packages, and its logic is tested, but it has never
+run inside a real editor: the build environment could not reach VS Code's
+download CDN. See [apps/vscode/TESTING.md](./apps/vscode/TESTING.md).
 
 `sani-core` has no required third-party dependencies and imports no web
 framework, so the same engine backs the server, a CLI, and the tests.

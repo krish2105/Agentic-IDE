@@ -15,3 +15,8 @@ node_modules/
 # playwright
 apps/web/test-results/
 apps/web/playwright-report/
+
+# vscode extension build artifacts
+apps/vscode/dist/
+apps/vscode/*.vsix
+apps/vscode/.vscode-test/

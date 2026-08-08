@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { FileDiff, PlanStep, StepStatus } from "@/lib/types";
+import type { FileDiff, PlanStep, StepStatus } from "@sani/client";
 import type { ChatItem, PendingApproval } from "@/lib/useSessionStream";
 import { ApprovalCard } from "./ApprovalCard";
 import { DiffView } from "./DiffView";

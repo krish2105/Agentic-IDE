@@ -1,0 +1,19 @@
+{
+  "name": "sani-studio",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/sani-client",
+    "apps/web",
+    "apps/vscode"
+  ],
+  "scripts": {
+    "test:client": "npm run test --workspace @sani/client",
+    "test:e2e": "npm run test:e2e --workspace sani-web",
+    "test:vscode": "npm run test:vscode --workspace sani-vscode",
+    "build:web": "npm run build --workspace sani-web",
+    "build:vscode": "npm run build --workspace sani-vscode",
+    "package:vscode": "npm run package --workspace sani-vscode",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

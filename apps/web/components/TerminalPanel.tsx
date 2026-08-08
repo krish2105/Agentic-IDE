@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { wsUrl } from "@/lib/api";
+import { wsUrl } from "@/lib/client";
 
 interface Props {
   sessionId: string;

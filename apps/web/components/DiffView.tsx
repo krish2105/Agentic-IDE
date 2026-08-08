@@ -1,6 +1,6 @@
 "use client";
 
-import type { FileDiff, Hunk } from "@/lib/types";
+import type { FileDiff, Hunk } from "@sani/client";
 
 /**
  * Added lines carry the agent accent, per spec Section 6: agent-authored lines
