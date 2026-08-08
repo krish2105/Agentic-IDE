@@ -75,6 +75,7 @@ download CDN. See [apps/vscode/TESTING.md](./apps/vscode/TESTING.md).
 `sani-core` has no required third-party dependencies and imports no web
 framework, so the same engine backs the server, a CLI, and the tests.
 
-See [PROGRESS.md](./PROGRESS.md) for what is done, what is left, and the open
-verification debts. [CLAUDE.md](./CLAUDE.md) has the full API contract, event
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for how to run it, use every feature, and
+where it must not be exposed. [PROGRESS.md](./PROGRESS.md) covers what is done,
+what is left, and the open verification debts. [CLAUDE.md](./CLAUDE.md) has the full API contract, event
 protocol, and safety model.
