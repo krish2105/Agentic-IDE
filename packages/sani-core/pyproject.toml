@@ -1,0 +1,19 @@
+[project]
+name = "sani-core"
+version = "0.1.0"
+description = "Sani' agent engine - transport-agnostic planning, permission and execution core"
+requires-python = ">=3.11"
+# Intentionally zero required third-party dependencies. The core must stay
+# importable from any surface (FastAPI server, CLI, test harness) without
+# dragging a web framework in with it.
+dependencies = []
+
+[project.optional-dependencies]
+litellm = ["litellm>=1.50"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sani_core"]
