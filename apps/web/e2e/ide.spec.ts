@@ -107,10 +107,83 @@ test.describe("Ṣāni' Studio web IDE", () => {
 
     await page.screenshot({ path: "e2e/screenshots/03-terminal.png", fullPage: false });
 
+    // --- the trust ladder is visible, and the locked tiers are shown ------
+    await page.getByTestId("dock-tab-trust").click();
+    await expect(page.getByTestId("trust-panel")).toBeVisible();
+    // Locked tiers are shown rather than hidden: the guarantee has to be
+    // legible, not implied.
+    await expect(page.getByTestId("trust-file.delete")).toHaveAttribute(
+      "data-locked",
+      "true",
+    );
+    await expect(page.getByTestId("trust-browser.navigate_external")).toHaveAttribute(
+      "data-locked",
+      "true",
+    );
+    // file.write is auto-approved from session start.
+    await expect(page.getByTestId("trust-file.write")).toHaveAttribute("data-auto", "true");
+
+    await page.screenshot({ path: "e2e/screenshots/04-trust-ladder.png" });
+
     // --- the session shows up on the dashboard ----------------------------
     await page.goto("/");
     await expect(page.getByTestId(`session-row-${sessionId}`)).toContainText(
       "add a greeting module",
+    );
+    await expect(page.getByTestId("board-summary")).toContainText("total");
+  });
+
+  test("a trust tier can be earned, and a locked one cannot be switched on", async ({
+    page,
+  }) => {
+    const workspace = makeWorkspace();
+
+    const created = await fetch(`${SERVER}/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task: "trust ladder check", workspace, script: [] }),
+    });
+    const { session_id: sessionId } = await created.json();
+
+    await page.goto(`/session/${sessionId}`);
+    await page.getByTestId("dock-tab-trust").click();
+
+    const shellOther = page.getByTestId("trust-shell.other");
+    await expect(shellOther).toHaveAttribute("data-auto", "false");
+    await shellOther.getByRole("button").click();
+    await expect(shellOther).toHaveAttribute("data-auto", "true");
+
+    // The locked tiers have no toggle at all -- the server would refuse it,
+    // and offering a switch that cannot work is worse than not offering one.
+    const locked = page.getByTestId("trust-file.delete");
+    await expect(locked).toHaveAttribute("data-locked", "true");
+    await expect(locked.getByRole("button")).toHaveCount(0);
+  });
+
+  test("parallel sessions get a tab strip", async ({ page }) => {
+    const workspace = makeWorkspace();
+    const ids: string[] = [];
+    for (const task of ["first parallel session", "second parallel session"]) {
+      const created = await fetch(`${SERVER}/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task, workspace, script: [] }),
+      });
+      ids.push((await created.json()).session_id);
+    }
+
+    await page.goto(`/session/${ids[0]}`);
+    await expect(page.getByTestId("session-tabs")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId(`session-tab-${ids[0]}`)).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+
+    await page.getByTestId(`session-tab-${ids[1]}`).click();
+    await page.waitForURL(`**/session/${ids[1]}`);
+    await expect(page.getByTestId(`session-tab-${ids[1]}`)).toHaveAttribute(
+      "data-active",
+      "true",
     );
   });
 

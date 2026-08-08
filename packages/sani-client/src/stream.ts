@@ -19,7 +19,7 @@ import type {
 
 export interface ChatItem {
   key: string;
-  kind: "message" | "proposal" | "result" | "approval" | "status" | "error";
+  kind: "message" | "proposal" | "result" | "approval" | "status" | "error" | "retrieval";
   text: string;
   detail?: string;
   ok?: boolean;
@@ -48,6 +48,8 @@ export interface StreamState {
   chat: ChatItem[];
   context: ContextUsage | null;
   streamingMessage: string;
+  /** Labels of the code chunks retrieved before planning, if any. */
+  retrieved: string[];
   error: string | null;
 }
 
@@ -64,6 +66,7 @@ export const initialStreamState: StreamState = {
   chat: [],
   context: null,
   streamingMessage: "",
+  retrieved: [],
   error: null,
 };
 
@@ -167,6 +170,20 @@ export function reduceEvent(state: StreamState, event: SaniEvent): StreamState {
       next.diffs = { ...state.diffs, [diff.path]: diff };
       return next;
     }
+
+    case "rag.retrieved":
+      // Shown, not hidden: code that silently steered the plan is exactly what
+      // the user is entitled to see.
+      next.retrieved = event.data.chunks ?? [];
+      next.chat = push(state.chat, {
+        key,
+        kind: "retrieval",
+        text: `Read ${event.data.chunks.length} snippet${
+          event.data.chunks.length === 1 ? "" : "s"
+        } from the codebase`,
+        detail: (event.data.chunks as string[]).join("\n"),
+      });
+      return next;
 
     case "context.usage":
       next.context = event.data;

@@ -11,19 +11,24 @@ trust a session has accumulated.
 
 ## Status
 
-**Phases 0, 1 and 2 complete.** Agent core, FastAPI server with WebSocket
-streaming and approval gating, a working web IDE, and a VS Code extension.
-162 Python tests, 27 shared-client tests (3 against a live server), and 3
-Playwright tests driving a real browser against real servers.
+**Every phase in the roadmap is built.** Agent core, FastAPI server, web IDE,
+VS Code extension, codebase RAG, Redis-backed persistence, browser subagent,
+and the trust/Mission Control UI.
+
+**255 tests:** 223 Python (against a real Redis and a real Chromium), 27
+shared-client (3 against a live server), 5 Playwright driving a real browser
+against real servers.
 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Agent core, FastAPI server, WebSocket streaming, approval endpoint | ✅ |
 | 1 | Web IDE — Monaco, file tree, sandbox, xterm.js, chat panel | ✅ |
 | 2 | VS Code extension — sidebar, native diff, gutter marks | ✅\* |
-| 3 | Codebase RAG — pgvector + tree-sitter | — |
-| 3a–3c | Session Manager, background agents, browser subagent | — |
-| 4 | Trust ladder UI, design system, image diffs | — |
+| 3 | Codebase RAG — tree-sitter chunking, retrieval in planning | ✅ |
+| 3a | Session tab strip, Mission Control | ✅ |
+| 3b | Redis persistence, cross-process reattach | ✅ |
+| 3c | Browser subagent — Playwright adapter | ✅ |
+| 4 | Trust ladder UI, design system, image diffs | ✅ |
 
 ## Quick start
 
@@ -56,7 +61,7 @@ cd apps/web && npx playwright test   # 3 e2e tests, real browser + real servers
 
 ```
 packages/sani-core/     agent engine — planning, permissions, tools, execution
-packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
+packages/sani-server/   FastAPI + WebSocket transport, sandbox, Redis archive
 packages/sani-client/   shared TypeScript client — both surfaces read sessions
                         through the same reducer, so they cannot drift
 apps/web/               Next.js web IDE — Monaco, xterm.js, chat/plan/diffs dock

@@ -3,168 +3,164 @@
 **Last updated:** 8 August 2026 · branch `claude/sani-fastapi-server-phase-0-56vmdc`
 
 An agentic coding IDE on two surfaces — a web IDE and a VS Code extension —
-over one Python backend. Built against the master spec's phased roadmap
-(Section 9).
+over one Python backend. Built against the master spec's phased roadmap.
 
 ---
 
 ## Where it stands
 
+**Every phase in Section 9 is built.**
+
 | Phase | Scope | Status |
 |---|---|---|
-| **0** | Agent core, FastAPI server, WebSocket streaming, approval endpoint | ✅ Done |
-| **1** | Web IDE — Monaco, file tree, sandbox, xterm.js, chat panel | ✅ Done |
-| **2** | VS Code extension — sidebar, native diff, gutter marks | ⚠️ Built, unproven in a real editor |
-| — | *Extra:* agent shell routed through the sandbox | ✅ Done |
-| **3** | Codebase RAG — pgvector + tree-sitter | ⬜ Not started |
-| **3a** | Session Manager — parallel sessions, Mission Control v1 | 🟡 Partly done |
-| **3b** | Redis job queue — background persistence, reattach | 🟡 Groundwork done |
-| **3c** | Browser subagent — Playwright adapter, vision routing | ⬜ Not started |
-| **4** | Trust ladder UI, design polish, image diffs, demo recordings | 🟡 Partly done |
+| **0** | Agent core, FastAPI server, WebSocket streaming, approval endpoint | ✅ |
+| **1** | Web IDE — Monaco, file tree, sandbox, xterm.js, chat panel | ✅ |
+| **2** | VS Code extension — sidebar, native diff, gutter marks | ⚠️ built, unproven in a real editor |
+| **3** | Codebase RAG — tree-sitter chunking, retrieval injected into planning | ✅ |
+| **3a** | Session tab strip, Mission Control | ✅ |
+| **3b** | Redis persistence, cross-process reattach | ✅ |
+| **3c** | Browser subagent — Playwright tool adapter | ✅ |
+| **4** | Trust ladder UI, design system, image diffs | ✅ |
+| — | *Extra:* agent shell routed through the sandbox | ✅ |
 
-**Roughly 3,600 lines of Python, 3,000 of TypeScript, 1,600 of Python tests.**
-
----
-
-## What works today
-
-Start the backend, open the web IDE, describe a task. You get a plan **before**
-anything runs, watch each step execute, and get stopped when the agent tries
-something irreversible. Approve or reject — per diff hunk if you want. The
-editor, file tree and terminal all point at the same workspace the agent is
-editing.
-
-### The safety model
-
-This is the core of the product, not a feature bolted on.
-
-- **Auto-approved from the start:** reading files, writing inside the
-  workspace, running tests/lint, git commits, locked dependency installs.
-- **Always requires confirmation, at any trust level:** deleting files, git
-  history rewrites, network commands, new dependencies, touching secrets, any
-  path outside the workspace.
-- **Everything else** starts gated and earns auto-approval after 3 consecutive
-  manual approvals. One rejection revokes it.
-
-Enforced at a single chokepoint immediately before execution, and the
-always-confirm check runs *before* the trust ladder is consulted — so a
-corrupted or maliciously-set trust state cannot unlock it. There are tests that
-force every unlockable tier on and confirm each irreversible action still stops.
-
-### The event protocol
-
-One versioned, gapless event stream per session. Both clients render it and
-nothing else. Reconnect with `?from_seq=N` and the server replays exactly what
-was missed — the client drops any overlap, so replay is idempotent.
-
-This is what Phase 3b's background sessions will reattach through. It was
-cheap to build in Phase 0 and would have been expensive to retrofit.
+The Section 7 API contract is complete, including the two RAG endpoints.
 
 ---
 
 ## Verification
 
-| Suite | Count | What it proves |
+| Suite | Count | Runs against |
 |---|---|---|
-| Python | **162** | Core logic, API contract, safety tier, real WebSocket frames |
-| Shared client | **27** | Event reducer, reconnect/replay, diff reconstruction |
-| — of those, live | 3 | Real server over a real WebSocket |
-| Playwright | **3** | Real Chromium, real Next build, real server |
-| VS Code integration | 5 | ⚠️ **Written but never executed** — see below |
+| Python | **223** | A real `redis-server`, a real Chromium, real WebSocket frames |
+| Shared client | **27** | Real WebSocket to a live server for 3 of them |
+| Playwright | **5** | Real Chromium, real Next build, real API server |
+| VS Code integration | 5 | ⚠️ **never executed** — see below |
 
 ```bash
-uv run pytest          # 162 tests, ~8s, no network
+uv run pytest          # 223 tests, ~31s
 npm run test:client    # 27 tests; 3 use a live server if one is running
-npm run test:e2e       # 3 browser tests; both servers must be up
+npm run test:e2e       # 5 browser tests; both servers must be up
 npm run typecheck      # all three TypeScript workspaces
 ```
 
-The Playwright suite drives the actual product: create a session, watch the
-plan stream in, get blocked by an irreversible delete, approve it, see the file
-land in Monaco and the terminal. Screenshots are committed in
-`apps/web/e2e/screenshots/`.
+The Python suite starts its own Redis and drives a real browser; both skip
+cleanly when the binaries are absent.
 
 ---
 
-## What is left
+## What each phase actually does
 
-### Phase 3 — Codebase RAG (not started)
-pgvector + tree-sitter chunking by function/class, retrieval injected into the
-planning step. The largest genuinely new piece of work remaining.
+### The safety model (the core of the product)
 
-### Phase 3a — Session Manager (partly done)
-The server already runs multiple sessions in parallel and `/mission-control`
-returns one row per session. **Left:** a session tab strip in the web IDE, and
-a richer Mission Control view than the current list.
+- **Auto-approved from the start:** reading files, writing inside the
+  workspace, running tests/lint, git commits, locked dependency installs.
+- **Always confirms, at any trust level:** deleting files, git history
+  rewrites, network commands, new dependencies, secrets, paths outside the
+  workspace, and browser navigation off this machine.
+- **Everything else** starts gated and earns autonomy after 3 consecutive
+  manual approvals; one rejection revokes it.
 
-### Phase 3b — Background sessions (groundwork done)
-Sessions sit behind a `SessionStore` protocol with an in-memory implementation,
-and the event log already supports reattach-after-disconnect. **Left:** the
-Redis-backed store and worker, so sessions survive the server process and
-notify on completion.
+Enforced at a single chokepoint immediately before execution, with the
+always-confirm check running *before* the trust ladder is consulted. Tests
+force every unlockable tier on and confirm each irreversible action still
+stops. The seventh tier — browser navigation — was added in Phase 3c because
+driving a browser to a remote URL has the same blast radius as `curl`.
+Extending that tier is allowed; removing from it is not.
 
-### Phase 3c — Browser subagent (not started)
-A Playwright-backed tool adapter. It implements the same three methods
-(`propose` / `execute` / `result`) as the file and shell tools and needs no
-executor changes — that was the point of the adapter interface. Also needs
-vision-capable model routing, which depends on free-tier quota.
+### Phase 3 — RAG
 
-### Phase 4 — Polish (partly done)
-Dark-first design system and the single-accent rule are in and enforced.
-**Left:** a trust ladder UI (the API exists, nothing renders it), image diff
-previews, and demo recordings.
+tree-sitter chunking by function and class, because a fixed window cuts a
+function in half and the retrieved text then lacks either the signature saying
+what it is or the body saying what it does.
+
+Retrieval is **disclosed**: a session whose workspace is indexed emits
+`rag.retrieved` with what it read, before the plan. Code silently steering a
+plan is the same opacity the approval gate exists to stop.
+
+The default embedder is **lexical, not semantic**, and the API says so. It
+matches identifiers — most of the signal in code search — but will not connect
+"authorise" to `check_permission`. It is the default because the suite has to
+be reproducible with no API keys; LiteLLM embeddings sit behind a flag.
+
+### Phase 3b — Redis persistence
+
+Sessions outlive the process. A second server instance sharing one Redis reads
+a session it never created, replays its full log, and streams it live.
+
+The split that makes this work: the **store** holds runtime handles (executor,
+sandbox, PTY) and stays in memory because those are process-local; the
+**archive** holds the record and is what Redis backs.
+
+A session interrupted by a restart is marked failed *with a reason* rather than
+left looking live — a spinner for work that will never resume is a lie the user
+cannot detect. Restored sessions are readable history; steering them returns
+409.
+
+### Phase 3c — Browser subagent
+
+Implements the same `propose`/`execute`/`result` as every other adapter and
+needed **no executor changes**. That is the architectural claim the
+three-stretch-features argument rests on, and it held.
+
+Verification is DOM-based and deterministic, because a self-correct loop needs
+a real assertion rather than a screenshot to squint at. Screenshots are still
+captured, into the workspace where the file tree already shows them.
+
+### Phase 3a + 4 — the UI
+
+Session tab strip for parallel sessions, a Mission Control summary with a
+durability indicator, image previews in the Diffs tab, and a trust ladder panel
+that shows locked tiers rather than hiding them — autonomy the user cannot see
+is indistinguishable from autonomy they did not consent to.
 
 ---
 
 ## Open debts — read before demoing
 
-**Two things are written and wired but have never executed:**
+**Three things are written and wired but have never executed.** Each reports
+its own unverified state rather than letting a caller assume otherwise:
 
 1. **The VS Code extension in a real editor.** It compiles, typechecks and
-   packages to a VSIX, and its logic is covered by the shared-client tests. But
-   the integration suite needs to download VS Code, which the build environment
-   could not reach. That leaves activation, command registration, the webview
-   provider, the `vscode.diff` call and the decoration API unproven. One command
-   fixes this on any normal machine — see `apps/vscode/TESTING.md`.
-
-2. **The Docker sandbox against a live daemon.** Written in an environment with
-   the Docker client but no daemon. It reports `verified: false` in its own
-   description rather than letting anything assume otherwise. The local sandbox
-   (no isolation, and it says so) is the tested default.
+   packages to a VSIX, and its logic is covered by the shared-client tests, but
+   the integration suite needs to download VS Code and the build environment
+   could not reach that host. Activation, command registration, the webview
+   provider, the `vscode.diff` call and the decoration API are all unproven.
+   One command fixes this on a normal machine — `apps/vscode/TESTING.md`.
+2. **The Docker sandbox against a live daemon.** Reports `verified: false`.
+3. **pgvector against Postgres.** Reports `verified: false`.
 
 **Known limitations, all deliberate:**
 
-- ⚠️ **No authentication, and the agent can run shell commands.** This is remote
-  code execution if exposed. Localhost only. Do not deploy it anywhere
-  reachable until auth exists.
-- Sessions live in memory and die with the server process (Redis is 3b).
-- The event log is unbounded — fine for demo-length sessions.
-- `pause` and `kill` take effect at the next step boundary; a tool call already
-  running finishes rather than being interrupted mid-write.
+- ⚠️ **No authentication, and the agent runs shell commands.** This is remote
+  code execution if exposed. Localhost only.
+- A restored session can be read but not resumed; reviving execution needs a
+  worker process, which is not built.
+- Image diffs show an "after" and no "before" — the server retains pre-edit
+  text, not pre-edit bytes. The UI says so rather than faking a comparison.
+- `pause` and `kill` take effect at the next step boundary.
 - A failing tool call marks its step failed and the plan continues.
-  Self-correction is a later phase.
+  Self-correction is not built.
 - Context compaction is accounting plus a no-op hook; token counts are
   estimates and flagged as such.
-- Monaco bundles a `dompurify` with one low and one moderate advisory. No
-  upstream fix exists.
+- Monaco bundles a `dompurify` with one low and one moderate advisory.
 
 ---
 
 ## Two places the spec no longer matches reality
 
-**Section 1's interview narrative needs rewriting.** It says the agent engine
-was built first and then proven reusable by shipping it on two surfaces. That
-is not what happened — the engine was not available, so the core and the
-transport were designed together around one event contract. The accurate and
-still-strong version: the core is dependency-free and imports no web framework,
-which is what makes the reusability claim testable rather than asserted. Both
-clients now read sessions through one shared reducer, so "shared component
-bundle" is a fact about the code rather than a line on a slide.
+**Section 1's interview narrative needs rewriting.** It says the engine was
+built first and then proven reusable by shipping it on two surfaces. That is
+not what happened — the engine was not available, so the core and the transport
+were designed together around one event contract. The accurate version is still
+strong: the core imports no web framework, and both clients read sessions
+through one shared reducer, so "shared component bundle" is a property of the
+code rather than a line on a slide. Phase 3c is the sharper version of the same
+claim — the browser tool slotted into the adapter interface with no executor
+changes at all.
 
-**Next.js 16, not the spec's Next.js 14.** Every 14.x release, including the
-latest, carries 20+ unpatched high-severity advisories whose fix is Next 16.
-For greenfield App Router code that migration cost nothing. Still App Router,
-now on React 19.
+**Next.js 16, not the spec's Next.js 14.** Every 14.x release carries 20+
+unpatched high-severity advisories whose fix is 16. For greenfield App Router
+code that migration cost nothing.
 
 ---
 
@@ -173,21 +169,20 @@ now on React 19.
 ```
 packages/sani-core/     agent engine — planning, permissions, tools, execution
                         zero required third-party dependencies
-packages/sani-server/   FastAPI + WebSocket, sandbox, session manager
+packages/sani-core/rag/ chunking, embeddings, vector store, retrieval
+packages/sani-server/   FastAPI + WebSocket, sandbox, Redis archive
 packages/sani-client/   shared TypeScript client — both surfaces read a session
                         through the same reducer, so they cannot drift
-apps/web/               Next.js web IDE — Monaco, xterm.js, chat/plan/diffs
-apps/vscode/            VS Code extension — sidebar, native diff, gutter marks
+apps/web/               Next.js web IDE
+apps/vscode/            VS Code extension
 ```
 
 Three rules hold it together:
 
-1. **`sani-core` never imports a web framework.** The same engine backs the
-   server, a CLI and the tests.
+1. **`sani-core` never imports a web framework.**
 2. **Both clients read sessions through `@sani/client`.** A bug there is one
    bug, not two clients that disagree.
-3. **Clients hold no business logic.** If a client needs to compute something
-   about session state, that belongs in the Session Manager.
+3. **Clients hold no business logic.**
 
 Full API contract, event protocol and safety model: [CLAUDE.md](./CLAUDE.md).
 
@@ -202,21 +197,19 @@ uv run uvicorn sani_server.app:app --port 8000   # backend
 npm run dev --workspace sani-web                 # web IDE on :3000
 ```
 
-Open `http://localhost:3000`. For the extension:
-`npm run build:vscode && npm run package:vscode`, then install the VSIX.
-
-Prefer a terminal? `uv run python scripts/ws_client.py --workspace /tmp/demo`
-streams a session and prompts for approvals inline.
+Optional: `SANI_SESSION_STORE=redis` for persistence, `SANI_SANDBOX=docker` for
+container isolation, `SANI_MODEL_BACKEND=litellm` for real inference.
 
 ---
 
 ## Suggested next step
 
-**Phase 3 (RAG)** is the biggest remaining feature and benefits both clients at
-once, since retrieval happens server-side during planning.
+The build is feature-complete against the roadmap, so the highest-value work is
+no longer features — it is **converting the three unverified components into
+verified ones**, on a machine with normal network access. That is the
+difference between demoing something you know works and something you believe
+works.
 
-Cheaper and worth doing first if you have a machine with normal network access:
-run the two unexecuted test suites. That converts the project's two standing
-"written but unproven" caveats into either green checkmarks or a short bug list
-— and it is the difference between demoing something you know works and
-something you believe works.
+After that, the two things that would make this deployable rather than
+demoable: authentication, and a worker process so background sessions can
+resume rather than only be read.

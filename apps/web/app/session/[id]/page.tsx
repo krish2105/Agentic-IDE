@@ -5,10 +5,11 @@ import { use } from "react";
 import { EditorPane, type OpenTab } from "@/components/EditorPane";
 import { FileTree } from "@/components/FileTree";
 import { RightDock } from "@/components/RightDock";
+import { SessionTabs } from "@/components/SessionTabs";
 import { StatusBar } from "@/components/StatusBar";
 import { TerminalPanel } from "@/components/TerminalPanel";
 import { api } from "@/lib/client";
-import type { FileEntry, Session } from "@sani/client";
+import type { FileEntry, MissionControlRow, Session, TrustTier } from "@sani/client";
 import { useSessionStream } from "@/lib/useSessionStream";
 
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,10 +24,40 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
   const [sandboxKind, setSandboxKind] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [siblings, setSiblings] = useState<MissionControlRow[]>([]);
+  const [trust, setTrust] = useState<Record<string, TrustTier>>({});
 
   useEffect(() => {
-    api.getSession(id).then(setSession).catch(() => setSession(null));
+    api
+      .getSession(id)
+      .then((loaded) => {
+        setSession(loaded);
+        setTrust(loaded.trust);
+      })
+      .catch(() => setSession(null));
   }, [id]);
+
+  // The tab strip needs to know about sessions this page did not create.
+  useEffect(() => {
+    const load = () =>
+      api
+        .missionControl()
+        .then((board) => setSiblings(board.sessions))
+        .catch(() => undefined);
+    load();
+    const timer = setInterval(load, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Trust changes as the agent earns it, so re-read it whenever the stream
+  // says something was decided rather than only on load.
+  const resolvedCount = stream.chat.filter((item) => item.kind === "approval").length;
+  useEffect(() => {
+    api
+      .getSession(id)
+      .then((loaded) => setTrust(loaded.trust))
+      .catch(() => undefined);
+  }, [id, resolvedCount, stream.status]);
 
   const refreshTree = useCallback(async () => {
     setTreeLoading(true);
@@ -117,6 +148,16 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
   const pendingActionId = stream.pending?.action.id;
 
+  const toggleTrust = (actionType: string, autoApprove: boolean) =>
+    withBusy(async () => {
+      try {
+        const updated = await api.setTrust(id, actionType, autoApprove);
+        setTrust(updated.tiers);
+      } catch {
+        // The server refuses locked tiers; the panel already shows them locked.
+      }
+    });
+
   return (
     <div className="flex h-screen flex-col">
       <StatusBar
@@ -131,6 +172,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         onResume={() => withBusy(() => api.resume(id))}
         onKill={() => withBusy(() => api.kill(id))}
       />
+
+      <SessionTabs sessions={siblings} activeId={id} />
 
       <div className="flex min-h-0 flex-1">
         <FileTree
@@ -176,6 +219,9 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           currentStep={stream.currentStep}
           diffs={stream.diffs}
           pending={stream.pending}
+          trust={trust}
+          onTrustToggle={toggleTrust}
+          srcFor={(path) => api.rawFileUrl(id, path)}
           busy={busy}
           onApprove={(hunkIds) =>
             pendingActionId &&

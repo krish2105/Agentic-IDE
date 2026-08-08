@@ -61,5 +61,6 @@ const EMPTY_STATE: StreamState = {
   chat: [],
   context: null,
   streamingMessage: "",
+  retrieved: [],
   error: null,
 };

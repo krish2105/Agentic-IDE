@@ -67,12 +67,18 @@ function NewSessionForm({ onCreated }: { onCreated: (id: string) => void }) {
 export default function MissionControl() {
   const router = useRouter();
   const [rows, setRows] = useState<MissionControlRow[]>([]);
+  const [summary, setSummary] = useState({ active: 0, awaiting: 0, store: "memory" });
   const [offline, setOffline] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const board = await api.missionControl();
       setRows(board.sessions);
+      setSummary({
+        active: board.active,
+        awaiting: board.awaiting_approval,
+        store: board.store?.kind ?? "memory",
+      });
       setOffline(false);
     } catch {
       setOffline(true);
@@ -107,9 +113,27 @@ export default function MissionControl() {
           <NewSessionForm onCreated={(id) => router.push(`/session/${id}`)} />
         </div>
 
-        <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-          Sessions ({rows.length})
-        </h2>
+        <div className="mb-3 flex items-baseline gap-4">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+            Mission Control
+          </h2>
+          <span className="font-mono text-[11px] text-ink-dim" data-testid="board-summary">
+            {rows.length} total · {summary.active} running
+            {summary.awaiting > 0 && (
+              <span className="text-attention"> · {summary.awaiting} awaiting you</span>
+            )}
+          </span>
+          <span
+            className="ml-auto font-mono text-[11px] text-ink-faint"
+            title={
+              summary.store === "redis"
+                ? "Sessions survive a server restart"
+                : "Sessions live in memory and die with the server process"
+            }
+          >
+            store: {summary.store}
+          </span>
+        </div>
 
         {rows.length === 0 ? (
           <p className="rounded-lg border border-dashed border-edge px-4 py-10 text-center text-sm text-ink-faint">
@@ -135,6 +159,19 @@ export default function MissionControl() {
                   {row.approval_needed && (
                     <span className="shrink-0 rounded bg-attention/15 px-2 py-0.5 text-[11px] text-attention pulse-attention">
                       needs approval
+                    </span>
+                  )}
+                  {row.detached && (
+                    <span
+                      className="shrink-0 rounded bg-edge px-2 py-0.5 text-[11px] text-ink-faint"
+                      title="Restored from the archive: readable history, no running executor"
+                    >
+                      archived
+                    </span>
+                  )}
+                  {row.active_tool && (
+                    <span className="shrink-0 font-mono text-[11px] text-ink-faint">
+                      {row.active_tool}
                     </span>
                   )}
                   <span className="shrink-0 font-mono text-[11px] text-ink-faint">

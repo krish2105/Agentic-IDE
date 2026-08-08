@@ -34,6 +34,7 @@ export type EventType =
   | "tool.result"
   | "diff.generated"
   | "context.usage"
+  | "rag.retrieved"
   | "session.complete"
   | "session.error";
 
@@ -132,6 +133,14 @@ export interface Session {
   elapsed_s: number;
 }
 
+export interface RagStatus {
+  indexed: boolean;
+  chunks: number;
+  files: number;
+  embedder: { name: string; semantic: boolean };
+  store: { kind: string; verified?: boolean };
+}
+
 export interface MissionControlRow {
   session_id: string;
   task: string;
@@ -144,6 +153,8 @@ export interface MissionControlRow {
   active_tool: string | null;
   approval_needed: boolean;
   pending_action: ProposedAction | null;
+  /** Restored from the archive: readable history, no running executor. */
+  detached?: boolean;
 }
 
 export interface FileEntry {

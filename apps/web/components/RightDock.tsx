@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { FileDiff, PlanStep, StepStatus } from "@sani/client";
+import type { FileDiff, PlanStep, StepStatus, TrustTier } from "@sani/client";
 import type { ChatItem, PendingApproval } from "@/lib/useSessionStream";
 import { ApprovalCard } from "./ApprovalCard";
 import { DiffView } from "./DiffView";
+import { TrustPanel } from "./TrustPanel";
 
-type Tab = "chat" | "plan" | "diffs";
+type Tab = "chat" | "plan" | "diffs" | "trust";
 
 const STEP_MARKS: Record<StepStatus, { glyph: string; className: string }> = {
   pending: { glyph: "○", className: "text-ink-faint" },
@@ -43,6 +44,18 @@ function ChatFeed({ items, streaming }: { items: ChatItem[]; streaming: string }
               <span className="min-w-0 flex-1 truncate font-mono text-ink-dim">{item.text}</span>
               <code className="shrink-0 text-[10px] text-ink-faint">{item.detail}</code>
             </div>
+          );
+        }
+        if (item.kind === "retrieval") {
+          return (
+            <details key={item.key} className="item px-1 text-xs">
+              <summary className="cursor-pointer text-ink-faint hover:text-ink-dim">
+                {item.text}
+              </summary>
+              <pre className="mt-1 rounded bg-base px-2 py-1 font-mono text-[10px] text-ink-faint">
+                {item.detail}
+              </pre>
+            </details>
           );
         }
         if (item.kind === "result") {
@@ -128,8 +141,11 @@ interface Props {
   currentStep: number | null;
   diffs: Record<string, FileDiff>;
   pending: PendingApproval | null;
+  trust: Record<string, TrustTier>;
   onApprove: (hunkIds: string[] | null) => void;
   onReject: () => void;
+  onTrustToggle: (actionType: string, autoApprove: boolean) => void;
+  srcFor: (path: string) => string;
   busy: boolean;
 }
 
@@ -140,8 +156,11 @@ export function RightDock({
   currentStep,
   diffs,
   pending,
+  trust,
   onApprove,
   onReject,
+  onTrustToggle,
+  srcFor,
   busy,
 }: Props) {
   const [tab, setTab] = useState<Tab>("chat");
@@ -156,6 +175,7 @@ export function RightDock({
     { id: "chat", label: "Chat" },
     { id: "plan", label: "Plan", badge: steps.length || undefined },
     { id: "diffs", label: "Diffs", badge: diffList.length || undefined },
+    { id: "trust", label: "Trust" },
   ];
 
   return (
@@ -203,10 +223,13 @@ export function RightDock({
           ) : (
             <div className="space-y-4" data-testid="diffs-panel">
               {diffList.map((diff) => (
-                <DiffView key={diff.path} diff={diff} />
+                <DiffView key={diff.path} diff={diff} srcFor={srcFor} />
               ))}
             </div>
           ))}
+        {tab === "trust" && (
+          <TrustPanel tiers={trust} onToggle={onTrustToggle} busy={busy} />
+        )}
       </div>
     </aside>
   );

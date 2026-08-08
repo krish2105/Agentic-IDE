@@ -1,4 +1,11 @@
-import type { FileDiff, FileEntry, MissionControlRow, Session } from "./types.ts";
+import type {
+  FileDiff,
+  FileEntry,
+  MissionControlRow,
+  RagStatus,
+  Session,
+  TrustTier,
+} from "./types.ts";
 
 export class ApiError extends Error {
   status: number;
@@ -64,9 +71,12 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch) {
     getSession: (id: string) => request<Session>(`/session/${id}`),
 
     missionControl: () =>
-      request<{ sessions: MissionControlRow[]; active: number; awaiting_approval: number }>(
-        "/mission-control",
-      ),
+      request<{
+        sessions: MissionControlRow[];
+        active: number;
+        awaiting_approval: number;
+        store?: { kind: string; durable: boolean };
+      }>("/mission-control"),
 
     approve: (id: string, actionId: string, hunkIds?: string[] | null) =>
       request<Record<string, unknown>>(`/session/${id}/approve`, {
@@ -85,6 +95,25 @@ export function createApi(baseUrl: string, fetchImpl: typeof fetch = fetch) {
     kill: (id: string) => request<Session>(`/session/${id}/kill`, { method: "POST" }),
 
     diff: (id: string) => request<{ files: FileDiff[] }>(`/session/${id}/diff`),
+
+    setTrust: (id: string, actionType: string, autoApprove: boolean) =>
+      request<{ tiers: Record<string, TrustTier> }>(`/session/${id}/trust`, {
+        method: "PATCH",
+        body: JSON.stringify({ action_type: actionType, auto_approve: autoApprove }),
+      }),
+
+    /** Bytes URL for images -- screenshots and image diffs. */
+    rawFileUrl: (id: string, path: string) =>
+      `${server}/session/${id}/file/raw?path=${encodeURIComponent(path)}`,
+
+    ragStatus: (sessionId: string) =>
+      request<RagStatus>(`/rag/status?session_id=${encodeURIComponent(sessionId)}`),
+
+    ragIndex: (sessionId: string) =>
+      request<{ files: number; chunks: number; elapsed_s: number }>("/rag/index", {
+        method: "POST",
+        body: JSON.stringify({ session_id: sessionId }),
+      }),
 
     files: (id: string) =>
       request<{ workspace: string; entries: FileEntry[] }>(`/session/${id}/files`),

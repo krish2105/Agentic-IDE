@@ -1,10 +1,12 @@
 # Ṣāni' Studio — project memory
 
 A dual-client agentic IDE (VS Code extension + web IDE) over one Python backend.
-**Phases 0, 1 and 2 are complete:** the agent core, the FastAPI server with
-WebSocket streaming and approval gating, the Next.js web IDE, and the VS Code
-extension. ⚠️ The extension has never run inside a real editor — see
-`apps/vscode/TESTING.md`.
+**Every phase in the roadmap is built:** the agent core, the FastAPI server,
+the web IDE, the VS Code extension, codebase RAG, Redis-backed session
+persistence, the browser subagent, and the trust/Mission Control UI. ⚠️ Three
+things are written but unverified — the VS Code extension in a real editor,
+`DockerSandbox` against a daemon, and `PgVectorStore` against Postgres. Each
+says so in its own `describe()` or its TESTING doc.
 
 Read this before changing the server. The API contract and the safety model
 below are consumed by both clients; changing either is a breaking change for
@@ -18,11 +20,13 @@ every surface at once.
 packages/sani-core/     agent engine — zero required third-party deps
 packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
 packages/sani-client/   shared TypeScript client — wire types, reducer, API
+packages/sani-core/rag/ chunking, embeddings, vector store, retrieval
 tests/core|server/      Python unit and API tests
 scripts/ws_client.py    manual stream viewer against a live server
 apps/web/               Next.js web IDE (Phase 1)
 apps/web/e2e/           Playwright tests — real browser against real servers
 apps/vscode/            VS Code extension (Phase 2)
+apps/web/components/    session tabs, trust ladder, image diffs (Phase 3a/4)
 ```
 
 Two package managers: `uv` owns the Python workspace, npm workspaces own the
@@ -47,7 +51,7 @@ because `packages/` also holds a TypeScript package.
 uv sync                                          # install the Python workspace
 npm install                                      # install all TS workspaces (root)
 
-uv run pytest                                    # 162 tests, ~8s
+uv run pytest                                    # 223 tests, ~31s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
 npm run test:client                              # 27 shared-client tests
 npm run test:e2e                                 # Playwright, needs both servers up
@@ -62,7 +66,7 @@ npm run build:vscode && npm run package:vscode   # extension + VSIX
 
 ## API contract
 
-Section 7 of the build spec, minus the two RAG endpoints (Phase 3).
+Section 7 of the build spec, complete.
 
 | Endpoint | Method | Purpose |
 |---|---|---|
@@ -87,8 +91,17 @@ Added in Phase 1 for the web IDE:
 | `/session/{id}/file?path=` | GET | File contents. Flags binary and oversized. |
 | `/session/{id}/file` | PUT | Save an edit made by the human in the editor. |
 | `/session/{id}/terminal` | WS | PTY bridge for xterm.js. |
+| `/session/{id}/file/raw?path=` | GET | File bytes with a content type, for images. |
 
-**Not implemented:** `/rag/index`, `/rag/query` (Phase 3).
+Added in Phase 3 for RAG:
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/rag/index` | POST | (Re)index a workspace. Takes `workspace` or `session_id`. |
+| `/rag/query` | POST | Retrieve chunks. The same call the planner makes. |
+| `/rag/status` | GET | What is indexed, and what is doing the indexing. |
+
+The Section 7 contract is now complete.
 
 ### `POST /session`
 
@@ -169,6 +182,67 @@ Where a command will run is on `tool.proposed` as `preview.runs_in`, and on
 `tool.result` as `data.runs_in`, so the client can show it *before* approval:
 "host" and "container" are different decisions about the same command.
 
+## Session persistence (Phase 3b)
+
+`SANI_SESSION_STORE=memory` (default) or `redis`; `SANI_REDIS_URL` sets the URL.
+
+The split matters: the **store** keeps runtime handles (executor task, sandbox,
+PTY) and is always in memory, because those are process-local by nature. The
+**archive** keeps the record — a session snapshot and the ordered event log —
+and is what Redis backs. Without an archive the server behaves exactly as it
+did in Phase 0.
+
+With Redis: a session survives the process, a second server instance can replay
+and live-stream a session it never created, and a restart marks anything that
+was mid-flight as `failed` with a reason rather than leaving it looking live.
+Restored sessions are `detached` — readable history with no executor, so
+pause/resume/approve return 409.
+
+**Two writes are awaited, everything else is queued.** Event writes go through a
+single ordered writer per session (concurrent writes to one list arrive out of
+order, and a replayed log with holes is worse than a slow one). Both the log
+flush and the snapshot are awaited on the terminal event, because another
+process may read the session the instant it sees `session.complete`.
+
+## Codebase RAG (Phase 3)
+
+`SANI_EMBEDDINGS=hashing` (default) or `litellm`;
+`SANI_VECTOR_STORE=memory` (default) or `pgvector`.
+
+Chunking is tree-sitter by function and class, because a fixed window cuts a
+function in half and the retrieved text then lacks either the signature or the
+body. Code outside a definition is swept into its own chunks, with runs bounded
+by definitions rather than blank lines.
+
+**The default embedder is lexical, not semantic**, and `describe()` and
+`/rag/status` both say so. It matches identifiers — most of the signal in code
+search — but will not connect "authorise" to `check_permission`. It is the
+default because the suite must be reproducible with no API keys.
+
+⚠️ `PgVectorStore` has never run: this environment has the psql client and no
+server. It reports `verified: false`.
+
+Retrieval is per workspace, not per session, and is applied automatically to
+any session whose workspace is indexed. It emits `rag.retrieved` before
+`plan.proposed` — code silently steering a plan is the same opacity the
+approval gate exists to stop. It is also best-effort: an index failure returns
+empty rather than failing the run.
+
+## Browser subagent (Phase 3c)
+
+`BrowserTool` implements the same `propose`/`execute`/`result` as every other
+adapter and needed **no executor changes** — that is the architectural claim the
+three-stretch-features argument rests on.
+
+Ops: `goto`, `click`, `fill`, `text`, `assert_text`, `screenshot`. Verification
+is DOM-based and deterministic, because a self-correct loop needs a real
+assertion rather than a screenshot to squint at. Vision-model interpretation is
+the quota-dependent part of Section 3c and is not claimed as tested.
+
+Screenshots land in `.sani/artifacts` **inside** the workspace, so the file tree
+and file API already surface them. `ToolAdapter.aclose()` exists because this
+tool holds a whole Chromium; the executor calls it whenever a session ends.
+
 ---
 
 ## Event protocol (v1)
@@ -184,6 +258,7 @@ Every frame:
 | `session.status` | Status changes. `data.status` is the new status. |
 | `agent.message.delta` | Each token of planning reasoning. |
 | `agent.message.done` | Reasoning finished. |
+| `rag.retrieved` | Code was read from the index, **before** planning. |
 | `plan.proposed` | Full plan, **before** any execution. |
 | `plan.step.started` / `plan.step.completed` | Per step. |
 | `tool.proposed` | Before every action — **including auto-approved ones**. |
@@ -216,7 +291,10 @@ Statuses: `planning` · `executing` · `blocked-on-approval` · `paused` ·
    `session.error`, the server closes with code 1000. Multiple clients may
    subscribe to one session; they all receive identical frames.
 
-Bump `PROTOCOL_VERSION` in `sani_core/events.py` when the envelope changes.
+6. **New event *types* are additive, not breaking.** `rag.retrieved` was added
+   in Phase 3 without a version bump: the envelope is unchanged and clients
+   ignore types they do not know (there is a test for that). Bump
+   `PROTOCOL_VERSION` in `sani_core/events.py` only when the envelope changes.
 
 ---
 
@@ -229,10 +307,20 @@ Two tiers, from Section 5 of the build spec.
 
 **Always-confirm — no exceptions, at any trust level:** `file.delete`,
 `git.history_rewrite`, `shell.network`, `dependency.new`, `secret.access`,
-`path.outside_workspace`.
+`path.outside_workspace`, and `browser.navigate_external`.
 
-Everything else (`shell.other`) starts gated and earns auto-approval after 3
-consecutive manual approvals. One rejection resets the streak and revokes it.
+That last one is a seventh, added in Phase 3c. Section 5's list predates the
+browser tool; driving a browser to a remote URL has the same blast radius as
+`curl`. **Extending this tier is allowed, removing from it is not.**
+
+Everything else (`shell.other`, `browser.action`) starts gated and earns
+auto-approval after 3 consecutive manual approvals. One rejection resets the
+streak and revokes it.
+
+`TrustLadder.from_dict` re-derives `auto_approve` through the always-confirm
+check rather than trusting the stored flag. Once a snapshot has been through
+Redis it is untrusted input, and that is the one place a corrupted record could
+otherwise widen the tier.
 
 ### Where it is enforced
 
@@ -374,6 +462,11 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
 - The file tree is a flat listing capped at 5000 entries and skips vendored and
   VCS directories. It does not watch for changes; it refreshes on demand and
   whenever the agent emits a diff.
+- **Image diffs show an "after" and no "before."** The server retains pre-edit
+  *text* for diffing, not pre-edit bytes, so a modified image cannot be shown
+  side by side. The UI says so rather than rendering the same picture twice.
+- A restored (`detached`) session cannot be resumed. Reviving execution needs a
+  worker process, which is not built.
 
 ## Departures from the build spec
 
@@ -393,10 +486,12 @@ React 19.
 
 ## Next
 
-Phase 3 adds RAG (pgvector + tree-sitter); 3a–3c add the Session Manager,
-Redis-backed background sessions, and the browser subagent. The browser adapter
-implements the same three `ToolAdapter` methods and needs no executor changes.
+Three verification debts, all written and wired, none executed:
 
-Two verification debts to clear when the network allows: run the VS Code
-integration suite against a real editor, and `DockerSandbox` against a live
-daemon. Both are written and wired; neither has executed.
+1. the VS Code integration suite against a real editor (needs the VS Code CDN),
+2. `DockerSandbox` against a live daemon,
+3. `PgVectorStore` against a Postgres with pgvector.
+
+Each reports its own unverified state rather than letting a caller assume
+otherwise. Beyond those: a worker process so a restored session can resume
+rather than only be read, and auth — without it none of this can be exposed.
