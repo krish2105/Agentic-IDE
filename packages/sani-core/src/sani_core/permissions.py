@@ -132,6 +132,28 @@ class TrustLadder:
     def to_dict(self) -> dict[str, dict]:
         return {a.value: t.to_dict() for a, t in self.tiers.items()}
 
+    @classmethod
+    def from_dict(cls, data: dict[str, dict]) -> "TrustLadder":
+        """Rebuild a ladder from a snapshot.
+
+        Deliberately re-derives ``auto_approve`` through the always-confirm
+        check rather than trusting the stored flag: a snapshot is untrusted
+        input once it has been through Redis, and this is the one place a
+        corrupted record could otherwise widen the safety tier.
+        """
+        ladder = cls()
+        for raw_type, tier_state in (data or {}).items():
+            try:
+                action_type = ActionType(raw_type)
+            except ValueError:
+                continue
+            tier = ladder.tiers[action_type]
+            tier.consecutive_approvals = int(tier_state.get("consecutive_approvals", 0))
+            tier.auto_approve = bool(tier_state.get("auto_approve", False)) and (
+                action_type not in ALWAYS_CONFIRM
+            )
+        return ladder
+
 
 class PermissionLocked(Exception):
     """Raised when a caller tries to auto-approve an always-confirm action."""

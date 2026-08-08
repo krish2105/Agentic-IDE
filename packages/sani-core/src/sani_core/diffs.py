@@ -31,6 +31,17 @@ class Hunk:
             f"+{self.new_start + 1},{self.new_lines} @@"
         )
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Hunk":
+        return cls(
+            id=data["id"],
+            old_start=data["old_start"],
+            old_lines=data["old_lines"],
+            new_start=data["new_start"],
+            new_lines=data["new_lines"],
+            lines=list(data.get("lines", [])),
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
@@ -50,6 +61,16 @@ class FileDiff:
     unified: str = ""
     is_new_file: bool = False
     is_delete: bool = False
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FileDiff":
+        return cls(
+            path=data["path"],
+            hunks=[Hunk.from_dict(h) for h in data.get("hunks", [])],
+            unified=data.get("unified", ""),
+            is_new_file=data.get("is_new_file", False),
+            is_delete=data.get("is_delete", False),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

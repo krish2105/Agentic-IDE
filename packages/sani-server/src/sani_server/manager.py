@@ -10,16 +10,19 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
 from sani_core.approvals import ApprovalRegistry
+from sani_core.events import EventType
 from sani_core.executor import Executor
 from sani_core.models import build_model
 from sani_core.permissions import ActionType, PermissionLocked
 from sani_core.session import AgentSession, Lifecycle, SessionStatus
 from sani_core.tools import build_tools
 
+from .archive import SessionArchive, build_archive, fire_and_forget
 from .hub import SessionHub
 from .runner import SandboxCommandRunner
 from .sandbox import build_sandbox
@@ -44,9 +47,78 @@ class InvalidState(Exception):
     """A lifecycle transition that does not apply to the session's status."""
 
 
+#: Events after which the archived snapshot is refreshed.
+SNAPSHOT_ON = frozenset(
+    {EventType.SESSION_STATUS, EventType.SESSION_COMPLETE, EventType.SESSION_ERROR}
+)
+
+
+def _require_live(record) -> None:
+    """Reject steering a session restored from the archive.
+
+    Its executor died with the process that owned it. Accepting the call and
+    silently doing nothing would be worse than a clear error.
+    """
+    if record.detached or record.executor is None:
+        raise InvalidState(
+            "session was restored from the archive and has no running executor"
+        )
+
+
 class SessionManager:
-    def __init__(self, store: SessionStore | None = None) -> None:
+    def __init__(
+        self, store: SessionStore | None = None, archive: SessionArchive | None = None
+    ) -> None:
         self.store = store or MemorySessionStore()
+        self.archive: SessionArchive = archive or build_archive()
+        self._writes: set[asyncio.Task] = set()
+
+    def _persist(self, session: AgentSession) -> None:
+        if self.archive.enabled:
+            fire_and_forget(
+                self.archive.snapshot(session.id, session.to_dict()), keep=self._writes
+            )
+
+    async def restore(self) -> int:
+        """Rehydrate archived sessions at startup (Phase 3b).
+
+        Returns how many were recovered. Sessions that were mid-flight when the
+        process died are marked failed rather than left looking live: their
+        executor is gone, and showing a spinner for work that will never resume
+        would be a lie the user cannot detect.
+        """
+        if not self.archive.enabled:
+            return 0
+
+        recovered = 0
+        for state in await self.archive.load():
+            session_id = state.get("session_id")
+            if not session_id or self.store.has(session_id):
+                continue
+
+            session = AgentSession.from_dict(state)
+            hub = SessionHub(session_id, self.archive)
+            hub.hydrate(await self.archive.events(session_id))
+
+            if not session.is_terminal:
+                session.status = SessionStatus.FAILED
+                session.error = "session interrupted by a server restart"
+                session.ended_at = time.time()
+                self._persist(session)
+
+            # No executor and no sandbox: this record is a readable history, not
+            # a resumable run. Lifecycle calls against it fail loudly.
+            self.store.put(
+                SessionRecord(
+                    session=session,
+                    hub=hub,
+                    executor=None,
+                    sandbox=build_sandbox(session.workspace, session_id),
+                    detached=True,
+                )
+            )
+            recovered += 1
+        return recovered
 
     # ---- workspace ----
 
@@ -104,15 +176,24 @@ class SessionManager:
                 raise InvalidState(f"unknown action_type {raw_type!r}") from exc
             session.trust.set_auto_approve(parsed, auto)
 
-        hub = SessionHub(session.id)
+        hub = SessionHub(session.id, self.archive)
         # The sandbox is built first: the agent's shell tool executes through
         # it, so it is a dependency of the tools rather than a side channel.
         sandbox = build_sandbox(ws, session.id)
+        async def emit(event):
+            payload = await hub.publish(event)
+            # Snapshot on every status transition: the archive is what a
+            # restarted process and a second server instance read, and a stale
+            # snapshot there is indistinguishable from a stuck session.
+            if event.type in SNAPSHOT_ON:
+                self._persist(session)
+            return payload
+
         executor = Executor(
             session,
             tools=build_tools(tool_names, ws, runner=SandboxCommandRunner(sandbox)),
             model=build_model(model_backend, script=script),
-            emit=hub.publish,
+            emit=emit,
             registry=ApprovalRegistry(),
         )
         record = SessionRecord(
@@ -122,6 +203,7 @@ class SessionManager:
 
         # The executor runs detached. Clients attach to the stream whenever they
         # like; the hub's log means a late subscriber misses nothing.
+        self._persist(session)
         record.task = asyncio.create_task(executor.run(), name=f"sani-exec-{session.id}")
         return record
 
@@ -143,6 +225,7 @@ class SessionManager:
         note: str | None = None,
     ) -> dict:
         record = self.get(session_id)
+        _require_live(record)
         outcome = record.executor.registry.resolve(
             action_id, approved=approved, hunk_ids=hunk_ids, note=note
         )
@@ -159,6 +242,7 @@ class SessionManager:
         record = self.get(session_id)
         if record.session.is_terminal:
             raise InvalidState(f"session is {record.session.status.value}")
+        _require_live(record)
         record.executor.pause()
         return record
 
@@ -166,6 +250,7 @@ class SessionManager:
         record = self.get(session_id)
         if record.session.is_terminal:
             raise InvalidState(f"session is {record.session.status.value}")
+        _require_live(record)
         record.executor.resume()
         return record
 
@@ -173,6 +258,7 @@ class SessionManager:
         record = self.get(session_id)
         if record.session.is_terminal:
             return record
+        _require_live(record)
         record.executor.kill()
         if record.task:
             # The executor stops at its next checkpoint. A tool call already in
@@ -182,6 +268,7 @@ class SessionManager:
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 record.task.cancel()
         await record.sandbox.shutdown()
+        self._persist(record.session)
         return record
 
     # ---- views ----
@@ -204,14 +291,19 @@ class SessionManager:
         except ValueError as exc:
             raise InvalidState(f"unknown action_type {action_type!r}") from exc
         record.session.trust.set_auto_approve(parsed, auto_approve)
+        self._persist(record.session)
         return self.trust(session_id)
 
     def mission_control(self) -> dict:
         rows = [r.session.to_mission_control_row() for r in self.list()]
+        detached = {r.session.id for r in self.list() if r.detached}
+        for row in rows:
+            row["detached"] = row["session_id"] in detached
         return {
             "sessions": rows,
             "active": sum(1 for r in rows if r["status"] not in ("complete", "failed", "killed")),
             "awaiting_approval": sum(1 for r in rows if r["approval_needed"]),
+            "store": self.archive.describe(),
         }
 
 

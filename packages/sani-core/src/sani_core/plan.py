@@ -40,6 +40,17 @@ class PlanStep:
             "detail": self.detail,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "PlanStep":
+        return cls(
+            index=data["index"],
+            description=data["description"],
+            tool=data["tool"],
+            params=dict(data.get("params", {})),
+            status=StepStatus(data.get("status", "pending")),
+            detail=data.get("detail"),
+        )
+
 
 @dataclass(slots=True)
 class Plan:
@@ -53,3 +64,11 @@ class Plan:
             "rationale": self.rationale,
             "steps": [s.to_dict() for s in self.steps],
         }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Plan":
+        return cls(
+            task=data.get("task", ""),
+            rationale=data.get("rationale", ""),
+            steps=[PlanStep.from_dict(s) for s in data.get("steps", [])],
+        )

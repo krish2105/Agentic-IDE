@@ -43,6 +43,13 @@ class ContextWindow:
     def should_compact(self) -> bool:
         return self.pct >= COMPACTION_THRESHOLD
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "ContextWindow":
+        return cls(
+            limit=data.get("limit_tokens", DEFAULT_WINDOW),
+            used=data.get("used_tokens", 0),
+        )
+
     def to_dict(self) -> dict:
         return {
             "used_tokens": self.used,

@@ -38,6 +38,10 @@ def allowed_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    manager: SessionManager = app.state.manager
+    # Recover archived sessions before serving: a client reopening after a
+    # restart should find its history, not an empty dashboard.
+    app.state.restored = await manager.restore()
     yield
     # Stop detached executors so uvicorn's shutdown is not held open by a
     # session parked on an approval nobody is going to give.
@@ -47,6 +51,7 @@ async def lifespan(app: FastAPI):
             record.task.cancel()
             await asyncio.gather(record.task, return_exceptions=True)
         await record.sandbox.shutdown()
+    await app.state.manager.archive.close()
 
 
 def create_app(manager: SessionManager | None = None) -> FastAPI:
@@ -116,6 +121,7 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
             "protocol_version": PROTOCOL_VERSION,
             "event_types": [e.value for e in EventType],
             "always_confirm": sorted(a.value for a in ALWAYS_CONFIRM),
+            "session_store": app.state.manager.archive.describe(),
         }
 
     return app

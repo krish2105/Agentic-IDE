@@ -28,9 +28,12 @@ class SessionRecord:
 
     session: AgentSession
     hub: SessionHub
-    executor: Executor
+    executor: Executor | None
     sandbox: Sandbox
     task: asyncio.Task | None = None
+    #: True for a session restored from the archive. Its history is readable
+    #: but there is no executor behind it, so it cannot be steered.
+    detached: bool = False
 
 
 class UnknownSession(KeyError):

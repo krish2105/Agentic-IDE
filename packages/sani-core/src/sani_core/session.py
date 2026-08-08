@@ -97,11 +97,40 @@ class AgentSession:
             "pending_action": self.pending_action.to_dict() if self.pending_action else None,
             "trust": self.trust.to_dict(),
             "context": self.context.to_dict(),
+            "diffs": [d.to_dict() for d in self.diffs.values()],
             "error": self.error,
             "created_at": self.created_at,
             "ended_at": self.ended_at,
             "elapsed_s": self.elapsed_s,
         }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AgentSession":
+        """Rebuild a session from an archived snapshot (Phase 3b).
+
+        The pending action is deliberately not restored: it referenced a future
+        in a process that no longer exists, so presenting it as still awaiting
+        a decision would offer the user a button that cannot work.
+        """
+        session = cls(
+            task=data["task"],
+            workspace=Path(data["workspace"]),
+            id=data["session_id"],
+            lifecycle=Lifecycle(data.get("lifecycle", "foreground")),
+            status=SessionStatus(data.get("status", "planning")),
+            tools=list(data.get("tools", [])),
+            trust=TrustLadder.from_dict(data.get("trust", {})),
+            context=ContextWindow.from_dict(data.get("context", {})),
+            current_step=data.get("current_step"),
+            error=data.get("error"),
+            created_at=data.get("created_at", time.time()),
+            ended_at=data.get("ended_at"),
+        )
+        if data.get("plan"):
+            session.plan = Plan.from_dict(data["plan"])
+        for diff in data.get("diffs", []):
+            session.record_diff(FileDiff.from_dict(diff))
+        return session
 
     def to_mission_control_row(self) -> dict:
         """The one-row-per-session shape the dashboard renders (spec Section 5)."""

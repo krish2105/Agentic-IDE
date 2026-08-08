@@ -25,6 +25,9 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "httpx>=0.27",
+    # Optional runtime extras, always present for the test suite so the
+    # Redis-backed and RAG paths are exercised rather than merely written.
+    "redis>=5.2",
 ]
 
 [tool.pytest.ini_options]

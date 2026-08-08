@@ -51,6 +51,10 @@ async def stream_session(
 
     await websocket.accept()
     hub = record.hub
+    # With an archive attached this forwards events published by *other*
+    # server processes, so a client can stream a session this instance never
+    # created. Without one it is a no-op.
+    hub.start_relay()
 
     with hub.subscribe() as queue:
         # Subscribing before snapshotting the backlog means no event can slip
