@@ -4,4 +4,5 @@ export * from "./stream.ts";
 export * from "./session-stream.ts";
 export * from "./diff-apply.ts";
 export * from "./diagnose.ts";
+export * from "./pricing.ts";
 export * from "./replay.ts";

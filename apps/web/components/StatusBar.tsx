@@ -1,5 +1,6 @@
 "use client";
 
+import { describeSpend, formatSpend } from "@sani/client";
 import type { ContextUsage, SessionStatus } from "@sani/client";
 import { motion } from "motion/react";
 import Link from "next/link";
@@ -82,21 +83,17 @@ function ContextMeter({ context }: { context: ContextUsage | null }) {
  * displayed as though someone can.
  */
 function CostMeter({ context }: { context: ContextUsage | null }) {
-  const cost = context?.cost;
-  if (!cost || cost.calls === 0) return null;
+  // Formatting lives in @sani/client so this surface and the VS Code sidebar
+  // cannot describe one number two ways -- they did, and "$0.0000" read as free.
+  const spend = formatSpend(context?.cost);
+  if (!spend) return null;
 
   return (
     <span
       className="hidden shrink-0 font-mono tabular-nums text-ink-faint 2xl:inline"
-      title={
-        cost.priced
-          ? `${cost.input_tokens.toLocaleString()} in / ${cost.output_tokens.toLocaleString()} out over ${cost.calls} call(s) on ${cost.model}`
-          : `No published rate for ${cost.model ?? "this model"} — tokens counted, cost unknown`
-      }
+      title={describeSpend(context?.cost) ?? undefined}
     >
-      {cost.total_usd !== null && cost.total_usd !== undefined
-        ? `${cost.estimated ? "~" : ""}$${cost.total_usd.toFixed(4)}`
-        : `${cost.total_tokens.toLocaleString()} tok`}
+      {spend}
     </span>
   );
 }

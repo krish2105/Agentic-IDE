@@ -6,6 +6,7 @@
  * and shipping React into every webview instance would cost more than it saves.
  */
 
+import { describeSpend, formatSpend } from "@sani/client";
 import type { Critique, FileDiff, RiskAssessment, StreamState } from "@sani/client";
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
@@ -306,18 +307,13 @@ function render(): void {
       el("span", "muted mono", `· ${state.context.used_tokens.toLocaleString()} tok`),
     );
   }
-  // Money, not just tokens. Both ride on `context.usage` because they are the
-  // same measurement -- splitting them would let a client show spend and tokens
-  // from different moments. The honesty rules from `sani_core.pricing` carry
-  // over: an unpriced model stays silent rather than showing "$0.00", which
-  // would read as "this was free", and a total built from estimated token counts
-  // is prefixed "~".
-  const cost = state.context?.cost;
-  if (cost && cost.total_usd !== null && cost.total_usd !== undefined) {
-    const tilde = cost.estimated ? "~" : "";
-    const spend = cost.total_usd < 0.01 ? `${tilde}<$0.01` : `${tilde}$${cost.total_usd.toFixed(2)}`;
+  // Money, not just tokens. The format comes from @sani/client so this and the
+  // web IDE cannot disagree about the same figure -- they used to.
+  const spend = formatSpend(state.context?.cost);
+  if (spend) {
     const node = el("span", "muted mono", `\u00b7 ${spend}`);
-    node.title = `${cost.model ?? "unknown model"} \u00b7 ${cost.total_tokens.toLocaleString()} tokens over ${cost.calls} call${cost.calls === 1 ? "" : "s"}${cost.estimated ? " (token counts estimated)" : ""}`;
+    const detail = describeSpend(state.context?.cost);
+    if (detail) node.title = detail;
     header.append(node);
   }
 
