@@ -1,8 +1,15 @@
 """Docker-per-session sandbox.
 
-⚠️ Written but not exercised: the development environment this was built in has
-the Docker client without a daemon, so the code path below has never run. Treat
-it as unverified until someone runs the manual check in CLAUDE.md.
+Verified against a real daemon -- ``tests/server/test_docker_sandbox.py`` starts
+actual containers whenever one is reachable, and skips otherwise. It was
+unverified for a long time for an instructive reason: every guard here checks
+``shutil.which("docker")``, the *client*, so the code could report Docker as
+available while nothing could run. The tests gate on ``docker info`` instead.
+
+The first real run found a silent failure that no amount of reading would have
+shown: on macOS the daemon lives in a VM sharing only some host paths, and a bind
+mount of an unshared path mounts an *empty directory* rather than failing. See
+``_verify_mount``.
 
 Spec Section 11 is right to call this demo-grade. A resource-capped container
 reduces blast radius; it is not a multi-tenant security boundary, and nothing
@@ -13,7 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
 import shutil
+import uuid
+from pathlib import Path
 
 from sani_core.runners import MAX_OUTPUT_CHARS, CommandOutcome
 
@@ -84,6 +94,44 @@ class DockerSandbox(Sandbox):
             if code != 0:
                 raise SandboxError(f"could not start sandbox container: {output}")
         self._started = True
+        await self._verify_mount()
+
+    async def _verify_mount(self) -> None:
+        """Confirm the workspace is actually visible inside the container.
+
+        On macOS the daemon runs inside a VM that shares only some host paths,
+        and a bind mount of an unshared path does not fail -- it silently
+        produces an *empty directory*, exit code 0, no warning. The agent then
+        reads nothing, writes into the VM, and loses the work when the container
+        stops. Every symptom points at the agent rather than at a mount.
+
+        A sentinel is the only reliable check: an empty workspace is legitimately
+        empty, so comparing listings cannot tell the two apart. It is written to
+        the workspace we are about to hand an agent, and removed immediately.
+        """
+        sentinel = f".sani-mount-check-{uuid.uuid4().hex[:8]}"
+        probe = Path(self.workspace) / sentinel
+        try:
+            probe.write_text("mount check\n")
+        except OSError as exc:
+            raise SandboxError(f"workspace {self.workspace} is not writable: {exc}") from exc
+
+        try:
+            code, _ = await _run(*self.exec_argv(f"test -f {shlex.quote(sentinel)}"))
+        finally:
+            probe.unlink(missing_ok=True)
+
+        if code != 0:
+            raise SandboxError(
+                f"the workspace {self.workspace} is not visible inside the container. "
+                "The Docker daemon runs in a VM that shares only some host paths, and a "
+                "bind mount of an unshared path silently mounts an empty directory rather "
+                "than failing -- so the agent would read nothing and lose everything it "
+                "wrote. Move the workspace somewhere the VM shares (your home directory "
+                "is shared by default), or add the path to the VM's mounts: "
+                "`colima start --mount $PWD:w` for colima, or Settings -> Resources -> "
+                "File sharing in Docker Desktop."
+            )
 
     def exec_argv(self, command: str) -> list[str]:
         """Argv for a non-interactive command. Pure, so it is testable without
@@ -131,5 +179,5 @@ class DockerSandbox(Sandbox):
             "container": self.container,
             "image": self.image,
             "isolated": True,
-            "verified": False,
+            "verified": True,
         }

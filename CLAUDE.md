@@ -4,8 +4,8 @@ A dual-client agentic IDE (VS Code extension + web IDE) over one Python backend.
 **Every phase in the roadmap is built:** the agent core, the FastAPI server,
 the web IDE, the VS Code extension, codebase RAG, Redis-backed session
 persistence, the browser subagent, and the trust/Mission Control UI. ⚠️ One
-thing is written but unverified — `DockerSandbox` against a daemon. It says so
-in its own `describe()`. (Two others used to be on this list. `PgVectorStore`
+verification debt is now closed. (`DockerSandbox` was the last one — see the
+sandbox section; verifying it turned up a silent empty-mount failure on macOS. `PgVectorStore`
 against Postgres was run against a live Postgres+pgvector and now has a real
 test to prove it: `tests/core/test_pgvector_store.py`. The VS Code extension
 was run inside a real VS Code and all 7 integration tests pass — see
@@ -58,7 +58,7 @@ because `packages/` also holds a TypeScript package.
 uv sync                                          # install the Python workspace
 npm install                                      # install all TS workspaces (root)
 
-uv run pytest                                    # 367 tests, ~27s (0 skipped with redis + pgvector)
+uv run pytest                                    # 378 tests, ~30s (0 skipped with redis + docker)
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
 npm run test:client                              # 68 shared-client tests (needs Node 22+)
 npm run test:e2e                                 # 32 Playwright tests; both servers up
@@ -182,10 +182,20 @@ sets the Docker image.
   provides **no isolation** and says so in its own `describe()`. Correct for
   local single-user development and nothing else.
 - **`DockerSandbox`** starts one resource-capped, network-less container per
-  session. ⚠️ **Never executed** — it was written in an environment with the
-  Docker client but no daemon, and reports `verified: false`. Verify it before
-  relying on it: start a daemon, `SANI_SANDBOX=docker`, open a session, and
-  confirm the terminal attaches and `docker ps` shows `sani-<session_id>`.
+  session. **Verified** against a real daemon —
+  `tests/server/test_docker_sandbox.py` starts actual containers whenever one is
+  reachable and skips otherwise. It gates on `docker info`, not
+  `shutil.which("docker")`, which is why it went unverified so long: every guard
+  in the sandbox checks the *client*, so the code could report Docker as
+  available while nothing could run.
+
+  ⚠️ **On macOS the bind mount can silently mount nothing.** The daemon lives in
+  a VM that shares only some host paths, and mounting an unshared path does not
+  fail — it produces an *empty directory*, exit code 0, no warning. The agent
+  then reads nothing and loses everything it writes when the container stops,
+  and every symptom points at the agent. `_verify_mount` now writes a sentinel
+  after starting the container and refuses to serve if it is not visible inside,
+  naming the fix. This was found by the first real run and by nothing else.
 - **`SandboxExecSandbox`** runs commands under a macOS Seatbelt profile via
   `sandbox-exec` — no daemon, no image, no per-session process. It denies all
   filesystem writes and all network access by default, then re-opens writes to
@@ -805,14 +815,21 @@ React 19.
 
 ## Next
 
-One verification debt left, written and wired, not executed:
+**No verification debt left.** Every "written but not executed" claim has now met
+the real thing, and each one repaid the effort by exposing a bug that reading the
+code could not have found:
 
-1. `DockerSandbox` against a live daemon.
+| Claim | Verified by | What running it found |
+|---|---|---|
+| `PgVectorStore` | `tests/core/test_pgvector_store.py` | a missing `pgvector` extra the docs already told you to install |
+| VS Code extension | `apps/vscode/TESTING.md`, 7 tests | `@vscode/test-electron` hardcoding a renamed macOS binary path |
+| `SandboxExecSandbox` | `tests/server/test_sandbox_exec.py` | a Seatbelt profile that denied `/bin/sh` |
+| Redis persistence | `tests/server/test_redis_sessions.py` | four ordering bugs; a *completed* session restored as `failed` |
+| `DockerSandbox` | `tests/server/test_docker_sandbox.py` | a bind mount that silently mounts an empty directory on macOS |
 
-It reports its own unverified state rather than letting a caller assume
-otherwise. (Two others used to be on this list. `PgVectorStore` against
-Postgres is now verified — see `tests/core/test_pgvector_store.py`. The VS
-Code integration suite now runs against a real downloaded VS Code and all 7
-tests pass — see `apps/vscode/TESTING.md`.) Beyond that: a worker process so a
-restored session can resume rather than only be read, and auth — without it
-none of this can be exposed.
+The pattern is worth stating plainly: every one of these was invisible to review
+and obvious within a minute of execution. "Unverified" was never a formality.
+
+Still genuinely missing: a worker process so a restored session can resume rather
+than only be read, and real auth — one shared bearer token has no per-user
+identity and no revocation short of a restart.

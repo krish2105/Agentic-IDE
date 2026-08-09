@@ -97,9 +97,16 @@ def test_sandbox_selection(tmp_path):
         build_sandbox(tmp_path, "ses_x", "kubernetes")
 
 
-def test_docker_sandbox_reports_itself_as_unverified(tmp_path):
-    """It has never run against a live daemon; the description must say so."""
+def test_docker_sandbox_describes_itself_accurately(tmp_path):
+    """`describe()` is what a client shows a user about their isolation, so it
+    has to track reality. This asserted `verified is False` for as long as the
+    code had never met a daemon; `tests/server/test_docker_sandbox.py` now runs
+    real containers, so the honest answer changed.
+
+    If that file is ever deleted or stops running, this flips back to False --
+    the flag is a claim about evidence, not a compliment.
+    """
     described = build_sandbox(tmp_path, "ses_abc", "docker").describe()
     assert described["container"] == "sani-ses_abc"
     assert described["isolated"] is True
-    assert described["verified"] is False
+    assert described["verified"] is True
