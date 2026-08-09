@@ -17,9 +17,11 @@ from sani_core.tools import ToolError
 
 from .auth import BearerAuthMiddleware, describe_auth
 from .manager import InvalidState, InvalidWorkspace, SessionManager
+from .race import RaceCoordinator
 from .routes import ROUTERS
 from .routes.workspace import FileOutsideWorkspace
 from .sandbox import SandboxError
+from .worktrees import WorktreeError
 from .stores import UnknownSession
 
 #: Local development by default. Widening this is only safe together with
@@ -53,6 +55,9 @@ async def lifespan(app: FastAPI):
             record.task.cancel()
             await asyncio.gather(record.task, return_exceptions=True)
         await record.sandbox.shutdown()
+    # Worktrees are removed before the archive closes: a leaked worktree
+    # leaves branches in the user's real repository.
+    await app.state.races.shutdown()
     await app.state.manager.archive.close()
 
 
@@ -64,6 +69,9 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.manager = manager or SessionManager()
+    # Races own git worktrees, so they need explicit teardown alongside the
+    # sessions they spawned.
+    app.state.races = RaceCoordinator(app.state.manager)
 
     # Auth is added first so it wraps *outside* CORS: an unauthenticated request
     # should be refused before anything else looks at it, and the preflight
@@ -99,6 +107,10 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
     @app.exception_handler(InvalidWorkspace)
     async def _invalid_workspace(request: Request, exc: InvalidWorkspace):
         return _error(400, "invalid_workspace", str(exc))
+
+    @app.exception_handler(WorktreeError)
+    async def _race_unavailable(request: Request, exc: WorktreeError):
+        return _error(400, "race_unavailable", str(exc))
 
     @app.exception_handler(InvalidState)
     async def _invalid_state(request: Request, exc: InvalidState):

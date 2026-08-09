@@ -4,6 +4,7 @@ from . import (
     lifecycle,
     mission_control,
     provenance,
+    race,
     rag,
     sessions,
     stream,
@@ -26,6 +27,7 @@ ROUTERS = [
     rag.router,
     timeline.router,
     provenance.router,
+    race.router,
 ]
 
 __all__ = ["ROUTERS"]

@@ -111,6 +111,9 @@ Added in Phase 3 (v2) for replay:
 |---|---|---|
 | `/session/{id}/timeline` | GET | The replayable log plus computed keyframes. Takes `from_seq`. |
 | `/provenance` | GET | Line-level attribution per workspace. Takes `workspace` or `session_id`. |
+| `/race` | POST/GET | Start or list parallel agent races. |
+| `/race/{id}` | GET | Per-racer progress board. |
+| `/race/{id}/discard` | POST | End a race, optionally naming the racer you kept. |
 
 The Section 7 contract is now complete.
 
@@ -383,6 +386,29 @@ streak and revokes it.
 check rather than trusting the stored flag. Once a snapshot has been through
 Redis it is untrusted input, and that is the one place a corrupted record could
 otherwise widen the tier.
+
+### Parallel agent race (v2)
+
+`POST /race` runs N agents at one task, each in its own **git worktree** so they
+cannot see each other's edits and the losers are discarded by deleting a
+directory rather than unpicking a merge.
+
+**The workspace must be a git repository**, and that is refused plainly rather
+than degrading to something that looks like it worked — a user who thinks their
+agents are isolated when they are not is worse off than one told no.
+
+Every racer is a normal session behind the same approval gate and risk scoring.
+Parallelism must never become a way to launder autonomy past the thing that
+makes this product trustworthy; there is a test asserting the always-confirm
+tier is intact inside a racer.
+
+**Winner selection is deliberately not automated.** Choosing the best solution
+is the judgement the human is here for. `discard` *records* which racer you kept
+and leaves its branch in the source repo; merging it back is a history-touching
+operation that belongs behind the gate, not a side effect of closing a dialog.
+
+Capped at 6 racers: reviewing eight divergent solutions costs more human
+attention than the parallelism saves.
 
 ### Provenance (v2)
 
