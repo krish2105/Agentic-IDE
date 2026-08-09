@@ -8,7 +8,7 @@ thing is written but unverified — `DockerSandbox` against a daemon. It says so
 in its own `describe()`. (Two others used to be on this list. `PgVectorStore`
 against Postgres was run against a live Postgres+pgvector and now has a real
 test to prove it: `tests/core/test_pgvector_store.py`. The VS Code extension
-was run inside a real VS Code and all 5 integration tests pass — see
+was run inside a real VS Code and all 7 integration tests pass — see
 `apps/vscode/TESTING.md`, which also documents a real `@vscode/test-electron`
 version bug that surfaced only by actually running it.)
 
@@ -26,6 +26,7 @@ packages/sani-server/   FastAPI + WebSocket transport, sandbox, session manager
 packages/sani-client/   shared TypeScript client — wire types, reducer, API
 packages/sani-core/rag/ chunking, embeddings, vector store, retrieval
 tests/core|server/      Python unit and API tests
+scripts/serve.sh        start the server with token, CORS and backend set
 scripts/ws_client.py    manual stream viewer against a live server
 apps/web/               Next.js web IDE (Phase 1)
 apps/web/e2e/           Playwright tests — real browser against real servers
@@ -58,10 +59,11 @@ npm install                                      # install all TS workspaces (ro
 uv run pytest                                    # 361 tests, ~34s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
 npm run test:client                              # 45 shared-client tests (needs Node 22.6+)
-npm run test:e2e                                 # 31 Playwright tests; both servers up
+npm run test:e2e                                 # 32 Playwright tests; both servers up
 npm run typecheck                                # all three TS workspaces
 
-uv run uvicorn sani_server.app:app --port 8000   # the server
+./scripts/serve.sh                               # the server (token, CORS, backend)
+uv run uvicorn sani_server.app:app --port 8000   # ...or bare, no auth
 npm run dev --workspace sani-web                 # web IDE on :3000
 npm run build:vscode && npm run package:vscode   # extension + VSIX
 ```
@@ -527,13 +529,32 @@ a reproducible claim rather than a quota-dependent one.
 `uv sync --extra litellm`. Not covered by tests; verify by hand with
 `scripts/ws_client.py --backend litellm`.
 
+**`scripts/serve.sh` is how the server should be started.** It reads the auth
+token and the Groq key from files under `~/.sani/` (generating the token if
+absent), picks the backend from whether `~/.sani/groq-key` exists, sets CORS,
+and prints which backend it chose. Secrets stay out of shell history and out of
+rc files, and the three settings that fail *invisibly* when wrong — token, CORS,
+backend — stop being reassembled by hand on every restart.
+
+**The scripted backend ignoring your task is the single most confusing thing
+here.** Ask it for a readme and it will report a plan about a greeting module,
+because it replays a fixed script; nothing errors and nothing says why. The
+banner now names the backend for exactly that reason. A missing key defaults to
+`scripted` rather than failing, because the suite must run with no credentials —
+but that trade is only defensible if the choice is visible.
+
+A bad key is not silent: the planning call fails and the session ends `failed`
+with the provider's own message (`GroqException - Invalid API Key`), which is
+the useful signal.
+
 ---
 
 ## Testing
 
 361 Python tests, ~34 seconds, no network and no ports. Server tests use
 `fastapi.testclient.TestClient` for real WebSocket frames against the real ASGI
-app. Plus 45 shared-client tests and 31 Playwright tests.
+app. Plus 45 shared-client tests, 32 Playwright tests, and 7 VS Code
+integration tests.
 
 **`npm run test:client` needs Node 22+** — it runs `node --test
 --experimental-strip-types`. On Node 20 it fails with `bad option`, which looks
@@ -756,7 +777,7 @@ One verification debt left, written and wired, not executed:
 It reports its own unverified state rather than letting a caller assume
 otherwise. (Two others used to be on this list. `PgVectorStore` against
 Postgres is now verified — see `tests/core/test_pgvector_store.py`. The VS
-Code integration suite now runs against a real downloaded VS Code and all 5
+Code integration suite now runs against a real downloaded VS Code and all 7
 tests pass — see `apps/vscode/TESTING.md`.) Beyond that: a worker process so a
 restored session can resume rather than only be read, and auth — without it
 none of this can be exposed.
