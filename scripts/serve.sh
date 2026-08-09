@@ -37,6 +37,36 @@ GROQ_FILE="$SANI_DIR/groq-key"
 mkdir -p "$SANI_DIR"
 chmod 700 "$SANI_DIR"
 
+# --- is the port free? ------------------------------------------------------
+# uvicorn's own failure here is `[Errno 48] address already in use`, printed
+# *after* a successful-looking startup banner and immediately followed by
+# "Application shutdown complete" — so it reads like the server started and then
+# stopped for some unrelated reason. It also never says who holds the port,
+# which is the only thing you need to know.
+# `|| true` is load-bearing: lsof exits 1 when nothing matches, which under
+# `set -e` + `pipefail` kills this script with no output at all — i.e. the check
+# added to make a busy port obvious would instead make a *free* port fail
+# silently. Exactly the class of bug this script exists to prevent.
+HOLDER="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $2; exit}' || true)"
+if [ -n "$HOLDER" ]; then
+  # Match against the *full* command line and truncate only for display: this
+  # repo's path is long enough that `sani_server` sits past any sane cut point,
+  # so testing the shortened string mislabels our own server as a stranger.
+  HOLDER_CMD="$(ps -o command= -p "$HOLDER" 2>/dev/null || true)"
+  echo "error: port $PORT is already in use by PID $HOLDER" >&2
+  echo "         $(printf '%s' "$HOLDER_CMD" | cut -c1-100)" >&2
+  echo >&2
+  if printf '%s' "$HOLDER_CMD" | grep -q "sani_server"; then
+    echo "  That is another Ṣāni' server. Stop it and rerun:" >&2
+    echo "      kill $HOLDER" >&2
+    echo "  ...or run a second one elsewhere:  PORT=8070 $0" >&2
+  else
+    echo "  That is not a Ṣāni' server, so pick another port:" >&2
+    echo "      PORT=8070 $0" >&2
+  fi
+  exit 1
+fi
+
 # --- the venv ---------------------------------------------------------------
 # Called directly rather than through `uv run`, which re-syncs on every
 # invocation. See the UF_HIDDEN note in CLAUDE.md: if imports fail, check
