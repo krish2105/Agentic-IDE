@@ -58,13 +58,14 @@ because `packages/` also holds a TypeScript package.
 uv sync                                          # install the Python workspace
 npm install                                      # install all TS workspaces (root)
 
-uv run pytest                                    # 361 tests, ~34s
+uv run pytest                                    # 367 tests, ~27s (0 skipped with redis + pgvector)
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
-npm run test:client                              # 45 shared-client tests (needs Node 22.6+)
+npm run test:client                              # 68 shared-client tests (needs Node 22+)
 npm run test:e2e                                 # 32 Playwright tests; both servers up
 npm run typecheck                                # all three TS workspaces
 
 ./scripts/serve.sh                               # the server (token, CORS, backend)
+./scripts/install-service.sh                     # ...or as a launchd job that always runs
 uv run uvicorn sani_server.app:app --port 8000   # ...or bare, no auth
 npm run dev --workspace sani-web                 # web IDE on :3000
 npm run build:vscode && npm run package:vscode   # extension + VSIX
