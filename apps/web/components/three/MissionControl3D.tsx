@@ -3,7 +3,7 @@
 import { Billboard, Text } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import type { MissionControlRow } from "@sani/client";
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { readToken } from "@/lib/tokens";
 
@@ -287,9 +287,11 @@ export default function MissionControl3D({ sessions, onOpen }: Props) {
       <ReferenceGrid />
       <Dust />
 
-      {placed.map((item) => (
-        <SessionNode key={item.row.session_id} placed={item} onOpen={onOpen} />
-      ))}
+      <Suspense fallback={null}>
+        {placed.map((item) => (
+          <SessionNode key={item.row.session_id} placed={item} onOpen={onOpen} />
+        ))}
+      </Suspense>
 
       <Rig placed={placed} />
     </Canvas>

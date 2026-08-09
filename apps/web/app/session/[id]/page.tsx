@@ -289,6 +289,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           streaming={view.streamingMessage}
           steps={view.steps}
           currentStep={view.currentStep}
+          retrieved={view.retrieved}
           diffs={view.diffs}
           pending={replay.active ? null : stream.pending}
           trust={trust}

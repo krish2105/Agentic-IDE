@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import type { FileDiff, PlanStep, StepStatus, TrustTier } from "@sani/client";
 import type { ChatItem, PendingApproval } from "@/lib/useSessionStream";
 import { ApprovalCard } from "./ApprovalCard";
+import { CognitionPanel } from "./CognitionPanel";
 import { DiffView } from "./DiffView";
 import { TrustPanel } from "./TrustPanel";
 
-type Tab = "chat" | "plan" | "diffs" | "trust";
+type Tab = "chat" | "plan" | "graph" | "diffs" | "trust";
 
 const STEP_MARKS: Record<StepStatus, { glyph: string; className: string }> = {
   pending: { glyph: "○", className: "text-ink-faint" },
@@ -139,6 +140,8 @@ interface Props {
   streaming: string;
   steps: PlanStep[];
   currentStep: number | null;
+  /** Chunk labels from rag.retrieved -- what the agent read before planning. */
+  retrieved: string[];
   diffs: Record<string, FileDiff>;
   pending: PendingApproval | null;
   trust: Record<string, TrustTier>;
@@ -154,6 +157,7 @@ export function RightDock({
   streaming,
   steps,
   currentStep,
+  retrieved,
   diffs,
   pending,
   trust,
@@ -174,6 +178,7 @@ export function RightDock({
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: "chat", label: "Chat" },
     { id: "plan", label: "Plan", badge: steps.length || undefined },
+    { id: "graph", label: "Graph" },
     { id: "diffs", label: "Diffs", badge: diffList.length || undefined },
     { id: "trust", label: "Trust" },
   ];
@@ -217,6 +222,9 @@ export function RightDock({
 
         {tab === "chat" && <ChatFeed items={chat} streaming={streaming} />}
         {tab === "plan" && <PlanPanel steps={steps} currentStep={currentStep} />}
+        {tab === "graph" && (
+          <CognitionPanel steps={steps} currentStep={currentStep} retrieved={retrieved} />
+        )}
         {tab === "diffs" &&
           (diffList.length === 0 ? (
             <p className="text-xs text-ink-faint">No changes yet.</p>
