@@ -1,6 +1,6 @@
 # Ṣāni' Studio — progress
 
-**Last updated:** 8 August 2026 · branch `claude/sani-fastapi-server-phase-0-56vmdc`
+**Last updated:** 10 August 2026 · branch `main`
 
 An agentic coding IDE on two surfaces — a web IDE and a VS Code extension —
 over one Python backend. Built against the master spec's phased roadmap.
@@ -15,7 +15,7 @@ over one Python backend. Built against the master spec's phased roadmap.
 |---|---|---|
 | **0** | Agent core, FastAPI server, WebSocket streaming, approval endpoint | ✅ |
 | **1** | Web IDE — Monaco, file tree, sandbox, xterm.js, chat panel | ✅ |
-| **2** | VS Code extension — sidebar, native diff, gutter marks | ⚠️ built, unproven in a real editor |
+| **2** | VS Code extension — sidebar, native diff, gutter marks | ✅ verified in a real editor |
 | **3** | Codebase RAG — tree-sitter chunking, retrieval injected into planning | ✅ |
 | **3a** | Session tab strip, Mission Control | ✅ |
 | **3b** | Redis persistence, cross-process reattach | ✅ |
@@ -31,20 +31,29 @@ The Section 7 API contract is complete, including the two RAG endpoints.
 
 | Suite | Count | Runs against |
 |---|---|---|
-| Python | **240** | A real `redis-server`, a real Chromium, real WebSocket frames |
-| Shared client | **35** | Real WebSocket to a live server for 3 of them |
-| Playwright | **7** | Real Chromium, real Next build, real API server |
-| VS Code integration | 5 | ⚠️ **never executed** — see below |
+| Python | **378** | A real `redis-server`, a real Docker daemon, a real Chromium, real WebSocket frames |
+| Shared client | **68** | Real WebSocket to a live server for 3 of them |
+| Playwright | **32** | Real Chromium, real Next build, real API server |
+| VS Code integration | **7** | A real downloaded VS Code |
 
 ```bash
-uv run pytest          # 240 tests, ~33s
-npm run test:client    # 35 tests; 3 use a live server if one is running
-npm run test:e2e       # 7 browser tests; both servers must be up
+uv run pytest          # 378 tests, ~30s, 0 skipped with redis + docker present
+npm run test:client    # 68 tests; 3 use a live server if one is running
+npm run test:e2e       # 32 browser tests; both servers must be up
 npm run typecheck      # all three TypeScript workspaces
+cd apps/vscode && npx vscode-test   # 7 integration tests in a real editor
 ```
 
-The Python suite starts its own Redis and drives a real browser; both skip
-cleanly when the binaries are absent.
+Every dependency-backed suite **skips rather than fakes**: `redis-server`, a
+reachable Docker daemon, Postgres + pgvector, `sandbox-exec`. A green run never
+overstates what was exercised — which is the only reason the numbers above mean
+anything.
+
+**No verification debt remains.** All five formerly-unexecuted claims have met
+the real thing, and each exposed a bug review had missed: a missing pgvector
+extra, a renamed VS Code binary path, a Seatbelt profile denying `/bin/sh`, four
+Redis write-ordering bugs that restored a *completed* session as `failed`, and a
+Docker bind mount that silently mounts an empty directory on macOS.
 
 ---
 
@@ -117,17 +126,24 @@ is indistinguishable from autonomy they did not consent to.
 
 ## Open debts — read before demoing
 
-**Three things are written and wired but have never executed.** Each reports
-its own unverified state rather than letting a caller assume otherwise:
+**Nothing is unverified any more.** All three of the debts that used to sit here
+have been executed against the real dependency, and each one was hiding a bug:
 
-1. **The VS Code extension in a real editor.** It compiles, typechecks and
-   packages to a VSIX, and its logic is covered by the shared-client tests, but
-   the integration suite needs to download VS Code and the build environment
-   could not reach that host. Activation, command registration, the webview
-   provider, the `vscode.diff` call and the decoration API are all unproven.
-   One command fixes this on a normal machine — `apps/vscode/TESTING.md`.
-2. **The Docker sandbox against a live daemon.** Reports `verified: false`.
-3. **pgvector against Postgres.** Reports `verified: false`.
+1. **The VS Code extension in a real editor** — 7 integration tests pass against
+   a downloaded VS Code. Running it exposed `@vscode/test-electron@2.5.2`
+   hardcoding a macOS binary path that current builds renamed, and a
+   `--user-data-dir` long enough to break macOS's ~103-char Unix socket limit.
+2. **The Docker sandbox against a live daemon** — 9 live tests, and the first run
+   found that on macOS a bind mount of a path the VM does not share mounts an
+   *empty directory* rather than failing, so the agent would read nothing and
+   lose everything it wrote. `_verify_mount` now refuses to serve in that state.
+3. **pgvector against Postgres** — verified, and it exposed a `pgvector` extra the
+   docs told you to install but which did not exist.
+
+Redis persistence, previously listed as done, turned out to be the worst of them:
+its tests had always skipped, and enabling them showed a *completed* session being
+restored as `failed` through four separate write-ordering bugs. "Awaited" is not
+the same as "ordered", and a memory archive cannot show the difference.
 
 **Known limitations, all deliberate:**
 
