@@ -20,7 +20,14 @@ import {
   explainProblem,
   onConnectionChange,
 } from "@/lib/client";
-import { rise, springs, stagger, staggerChild, useGatedMotion } from "@/lib/motion";
+import {
+  rise,
+  springs,
+  stagger,
+  staggerChild,
+  useGatedMotion,
+  useMotionAllowed,
+} from "@/lib/motion";
 import { allows3D } from "@/lib/quality";
 import { useAmbientState } from "@/lib/useAmbientState";
 
@@ -211,6 +218,7 @@ export default function MissionControl() {
   const [spatial, setSpatial] = useState(true);
 
   const listVariants = useGatedMotion(stagger);
+  const animated = useMotionAllowed();
 
   // The landing page has no single session, so the ambient field reflects the
   // board: amber and breathing the moment anything is waiting on a human.
@@ -277,14 +285,28 @@ export default function MissionControl() {
           </div>
 
           {/* Kinetic headline: variable weight settles per word. Hero only --
-              this treatment never appears in the work surface. */}
-          <h1 className="flex flex-wrap gap-x-4 text-5xl leading-[0.95] tracking-tight text-ink md:text-7xl">
+              this treatment never appears in the work surface.
+
+              Under reduced motion the words are simply *there*, at full weight
+              and opacity, with no transition at all. Shortening the fade would
+              not be enough: a word crossing from transparent to opaque is the
+              exact vestibular trigger the preference exists to remove, and it
+              is also the state axe measures, so a "quick" fade reads as a
+              contrast failure on the largest text on the page. */}
+          <h1
+            data-testid="landing-hero"
+            className="flex flex-wrap gap-x-4 text-5xl leading-[0.95] tracking-tight text-ink md:text-7xl"
+          >
             {headline.map((word, index) => (
               <motion.span
                 key={word}
-                initial={{ opacity: 0, y: 24, fontVariationSettings: '"wght" 300' }}
+                initial={
+                  animated
+                    ? { opacity: 0, y: 24, fontVariationSettings: '"wght" 300' }
+                    : false
+                }
                 animate={{ opacity: 1, y: 0, fontVariationSettings: '"wght" 700' }}
-                transition={{ ...springs.weighty, delay: 0.08 * index }}
+                transition={animated ? { ...springs.weighty, delay: 0.08 * index } : { duration: 0 }}
                 className="inline-block"
               >
                 {word}

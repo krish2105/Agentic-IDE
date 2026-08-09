@@ -50,7 +50,25 @@
   --ease-swift: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* ---------------------------------------------------------------- themes -- */
+/* ---------------------------------------------------------------- themes --
+ *
+ * Every `--t-ink-*` value is measured, not eyeballed. `--t-ink-faint` carries
+ * timestamps, token counts and metadata -- small text, so WCAG AA wants 4.5:1,
+ * and the first draft of these themes shipped between 2.75 and 3.38. It read as
+ * "tastefully recessive" and was simply unreadable.
+ *
+ * The measurement that matters is against `.glass-elevated`, not against a
+ * token. That panel is `--t-raised` at 72% with `saturate(1.4)`, so it
+ * composites *lighter* than any solid surface in the theme -- a value tuned
+ * against `--t-raised` still failed on the approval card, which is the one
+ * surface a person must be able to read. These clear 4.75:1 there, with the
+ * margin deliberate: `backdrop-filter` output is renderer-dependent and a token
+ * sitting exactly on 4.50 would flake.
+ *
+ * `e2e/a11y.spec.ts` re-measures all of this in a real browser, on every theme,
+ * on both the landing page and a session blocked on approval -- so the next
+ * palette tweak cannot quietly undo it.
+ */
 
 :root,
 [data-theme="void"] {
@@ -61,7 +79,7 @@
   --t-edge-strong: #333a4d;
   --t-ink: #e9ecf3;
   --t-ink-dim: #99a2b4;
-  --t-ink-faint: #5e6779;
+  --t-ink-faint: #828896;
   --t-agent: #a78bfa;
   --t-agent-dim: #6d3fe0;
   --t-attention: #f5a524;
@@ -83,7 +101,7 @@
   --t-edge-strong: #3b2f6b;
   --t-ink: #ebe8fa;
   --t-ink-dim: #a49dc8;
-  --t-ink-faint: #6b6490;
+  --t-ink-faint: #8a84a7;
   --t-agent: #b9a3ff;
   --t-agent-dim: #7c4dff;
   --t-attention: #ffb340;
@@ -105,7 +123,7 @@
   --t-edge-strong: #1f4c55;
   --t-ink: #e4f3f2;
   --t-ink-dim: #8fb3b4;
-  --t-ink-faint: #567376;
+  --t-ink-faint: #7c9295;
   /* Violet against teal is the highest-contrast agent signal of any theme. */
   --t-agent: #bda0ff;
   --t-agent-dim: #7b4ce0;
@@ -128,7 +146,7 @@
   --t-edge-strong: #4e3a26;
   --t-ink: #f3ebe1;
   --t-ink-dim: #b8a68f;
-  --t-ink-faint: #7d6c58;
+  --t-ink-faint: #968979;
   --t-agent: #bb9dff;
   --t-agent-dim: #7c4ee6;
   --t-attention: #ffb02e;
@@ -155,7 +173,7 @@
   --t-edge-strong: #3b3b3b;
   --t-ink: #ededed;
   --t-ink-dim: #9c9c9c;
-  --t-ink-faint: #5f5f5f;
+  --t-ink-faint: #888888;
   --t-agent: #a78bfa;
   --t-agent-dim: #6d3fe0;
   --t-attention: #f5a524;
@@ -177,15 +195,15 @@
   --t-edge-strong: #cec7b8;
   --t-ink: #16181d;
   --t-ink-dim: #5b6270;
-  --t-ink-faint: #8b93a3;
+  --t-ink-faint: #646a75;
   /* Darkened so the agent channel still reads at 4.5:1 on white. */
   --t-agent: #6d28d9;
   --t-agent-dim: #a78bfa;
-  --t-attention: #b45309;
+  --t-attention: #9a4708;
   --t-attention-dim: #f5a524;
   --t-risk: #b91c1c;
-  --t-risk-mid: #b45309;
-  --t-ok: #15803d;
+  --t-risk-mid: #9a4708;
+  --t-ok: #137337;
   --t-danger: #b91c1c;
   --t-chrome: #8b8578;
   --ambient-hue: 40;

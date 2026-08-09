@@ -184,7 +184,10 @@ export function RightDock({
   ];
 
   return (
-    <aside className="flex h-full w-[26rem] shrink-0 flex-col border-l border-edge bg-surface">
+    // Full width below `lg`. On a phone this is the whole session view, and
+    // that is the right trade: the approval decision, the plan and the diffs
+    // are readable at 375px, an editor and a terminal are not.
+    <aside className="flex h-full w-full shrink-0 flex-col border-l border-edge bg-surface lg:w-[26rem]">
       <div className="flex h-8 shrink-0 items-stretch border-b border-edge">
         {tabs.map((entry) => (
           <button

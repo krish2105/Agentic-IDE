@@ -139,7 +139,14 @@ export function StatusBar({
         className="shrink-0 font-semibold tracking-tight text-ink transition-colors hover:text-agent"
         title="Back to all sessions"
       >
-        Ṣāni&apos; Studio
+        {/* The full wordmark is ~70px the phone layout does not have. Dropping
+            the link entirely would strand a narrow viewport with no way back to
+            Mission Control, so it contracts to the initial instead. */}
+        <span className="hidden sm:inline">Ṣāni&apos; Studio</span>
+        <span className="sm:hidden" aria-hidden>
+          Ṣ
+        </span>
+        <span className="sr-only sm:hidden">Ṣāni&apos; Studio — all sessions</span>
       </Link>
 
       <StatusPill status={status} />

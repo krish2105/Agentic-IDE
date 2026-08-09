@@ -279,7 +279,10 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           loading={treeLoading}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* The editor and terminal are a desktop surface and say so by being
+            absent below `lg`, rather than being squeezed into something that
+            technically renders and cannot be used. */}
+        <div className="hidden min-w-0 flex-1 flex-col lg:flex">
           <EditorPane
             provenance={provenance}
             tabs={tabs}

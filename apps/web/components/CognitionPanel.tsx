@@ -35,7 +35,7 @@ const STATUS_DOT: Record<StepStatus, string> = {
  */
 function CognitionFlat({ steps, currentStep, retrieved }: Props) {
   return (
-    <div className="rounded-xl border border-edge bg-base/40 p-3">
+    <div className="rounded-xl border border-edge bg-base/40 p-3" data-testid="cognition-flat">
       {retrieved.length > 0 && (
         <div className="mb-3 border-b border-edge pb-3">
           <p className="mb-1.5 font-mono text-[10px] uppercase tracking-wider text-ink-faint">

@@ -233,6 +233,7 @@ export default function RacePage({ params }: { params: Promise<{ id: string }> }
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               className="mb-6 rounded-xl border border-ok/40 bg-ok/10 px-4 py-3 text-xs leading-relaxed text-ok"
+              data-testid="race-outcome"
             >
               Kept racer <strong>{kept.label}</strong>. The other worktrees have been
               removed.

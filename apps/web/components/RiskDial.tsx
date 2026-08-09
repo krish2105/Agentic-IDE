@@ -31,7 +31,13 @@ export function RiskDial({ risk }: { risk: RiskAssessment }) {
   const filled = (risk.score / 100) * circumference;
 
   return (
-    <div className="rounded-lg border border-edge bg-base/40 p-2.5">
+    <div
+      className="rounded-lg border border-edge bg-base/40 p-2.5"
+      data-testid="risk-dial"
+      data-band={risk.band}
+      data-score={risk.score}
+      data-reversible={risk.reversible}
+    >
       <div className="flex items-start gap-3">
         <svg viewBox="0 0 36 36" className="h-11 w-11 shrink-0 -rotate-90" aria-hidden>
           <circle
@@ -79,6 +85,7 @@ export function RiskDial({ risk }: { risk: RiskAssessment }) {
             onClick={() => setOpen((value) => !value)}
             className="mt-1 text-[10px] uppercase tracking-wider text-ink-faint transition-colors hover:text-ink-dim"
             aria-expanded={open}
+            data-testid="risk-why"
           >
             {open ? "Hide reasoning" : `Why — ${risk.factors.length} factor${risk.factors.length === 1 ? "" : "s"}`}
           </button>
@@ -90,6 +97,7 @@ export function RiskDial({ risk }: { risk: RiskAssessment }) {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           className="mt-2 space-y-1 border-t border-edge pt-2"
+          data-testid="risk-factors"
         >
           {risk.factors.map((factor) => (
             <li key={factor} className="flex gap-2 text-[11px] leading-snug text-ink-dim">

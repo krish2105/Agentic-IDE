@@ -12,8 +12,7 @@ import { expect, test } from "@playwright/test";
 import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-const SERVER = process.env.SANI_SERVER_URL ?? "http://127.0.0.1:8000";
+import { SERVER, preflight } from "./preflight";
 
 function makeWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), "sani-e2e-"));
@@ -23,13 +22,32 @@ function makeWorkspace(): string {
 }
 
 test.describe("Ṣāni' Studio web IDE", () => {
+  test.beforeAll(preflight);
+
+  // Point the app at the server under test through its own runtime override
+  // rather than a build-time env var. That is the mechanism a hosted deploy
+  // actually uses, so the suite exercises the real path and does not depend on
+  // how the dev server happened to be started.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((server) => {
+      window.localStorage.setItem("sani.serverUrl", server);
+      // 3D off: WebGL in headless Chromium is slow and flaky, and every
+      // surface is required to be fully usable without it. If a test needs the
+      // 3D path it can opt back in.
+      window.localStorage.setItem("sani.quality", "off");
+    }, SERVER);
+  });
+
   test("plan, block on an irreversible action, approve, and see the result", async ({
     page,
   }) => {
     const workspace = makeWorkspace();
 
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /Ṣāni' Studio/ })).toBeVisible();
+    // The redesign made the h1 the promise ("Watch it think.") and demoted the
+    // product name to a wordmark, so assert on the landing page's own testid
+    // rather than on copy that is free to change.
+    await expect(page.getByTestId("landing-hero")).toBeVisible();
 
     // --- create a session from the UI -------------------------------------
     await page.getByTestId("task-input").fill("add a greeting module");

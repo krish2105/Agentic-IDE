@@ -30,7 +30,10 @@ export function FileTree({
   );
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-edge bg-surface">
+    // Hidden below `lg`, where the three-pane layout cannot fit: a 240px tree
+    // plus a 416px dock is 656px of fixed width and forces horizontal scroll on
+    // a phone. See the session layout for what narrow screens show instead.
+    <aside className="hidden h-full w-60 shrink-0 flex-col border-r border-edge bg-surface lg:flex">
       <div className="flex h-8 items-center justify-between border-b border-edge px-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
           Explorer

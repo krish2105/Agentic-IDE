@@ -116,6 +116,7 @@ export function ReplayScrubber({ replay }: { replay: Replay }) {
           onPointerMove={onPointerMove}
           role="slider"
           tabIndex={0}
+          data-testid="replay-track"
           aria-label="Replay position"
           aria-valuemin={0}
           aria-valuemax={last}
@@ -149,6 +150,8 @@ export function ReplayScrubber({ replay }: { replay: Replay }) {
                 }}
                 title={`${style.title} — ${frame.label}`}
                 aria-label={frame.label}
+                data-testid="replay-keyframe"
+                data-kind={frame.kind}
                 style={{ left: `${last > 0 ? (frame.seq / last) * 100 : 0}%` }}
                 className={`absolute top-1/2 h-2.5 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full ${style.color} transition-transform hover:scale-y-150`}
               />
