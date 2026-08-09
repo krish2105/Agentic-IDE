@@ -35,6 +35,27 @@ if ! curl -sf -o /dev/null --max-time 5 "http://127.0.0.1:$PORT/healthz"; then
   exit 1
 fi
 
+# Refuse to expose an unauthenticated server.
+#
+# serve.sh already refuses SANI_NO_AUTH=1 while a tunnel is up, but that check
+# only fires at *its* startup — start the server first and the tunnel second and
+# nothing objected, which is exactly what happened: an open server with a shell
+# tool, reachable from the internet, and no warning anywhere. The guard has to
+# exist at both ends because either order is a plausible thing to do.
+AUTH_REQUIRED="$(curl -sf --max-time 5 "http://127.0.0.1:$PORT/healthz" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("auth",{}).get("required"))' 2>/dev/null || echo unknown)"
+if [ "$AUTH_REQUIRED" != "True" ]; then
+  echo "error: the server on :$PORT has authentication OFF (auth.required=$AUTH_REQUIRED)." >&2
+  echo >&2
+  echo "  Tunnelling it would put an unauthenticated server on the public internet," >&2
+  echo "  and its shell tool executes commands. Restart it with a token:" >&2
+  echo >&2
+  echo "      kill \$(lsof -ti tcp:$PORT) && ./scripts/serve.sh" >&2
+  echo >&2
+  echo "  SANI_NO_AUTH=1 is for the local-only setup: web IDE on localhost, no tunnel." >&2
+  exit 1
+fi
+
 echo "starting tunnel to :$PORT …"
 cloudflared tunnel --url "http://127.0.0.1:$PORT" > "$LOG" 2>&1 &
 TUNNEL_PID=$!
