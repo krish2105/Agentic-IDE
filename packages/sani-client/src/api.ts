@@ -27,6 +27,16 @@ export interface CreateSessionInput {
   lifecycle?: "foreground" | "background";
   trust_overrides?: Record<string, boolean>;
   script?: unknown[];
+  /**
+   * Overrides `SANI_MODEL_BACKEND` for this session alone.
+   *
+   * The server has always accepted this; the shared client just never typed it,
+   * so callers had to drop to raw `fetch` to use it. It matters for tests: a
+   * suite asserting on the scripted planner's fixed plan is otherwise at the
+   * mercy of how the server happened to be started, and fails on a timeout
+   * waiting for an approval that a real model was never going to propose.
+   */
+  model_backend?: "scripted" | "litellm";
 }
 
 /**

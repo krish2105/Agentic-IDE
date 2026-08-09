@@ -250,6 +250,19 @@ function renderPlan(body: HTMLElement): void {
     body.append(el("p", "muted", "No plan yet."));
     return;
   }
+
+  // What the retriever fed the planner, shown above the plan it produced. The
+  // web IDE surfaces this and the extension did not, which is the drift the
+  // shared reducer is supposed to prevent: `rag.retrieved` was already in
+  // StreamState, nobody was rendering it. Code silently steering a plan is the
+  // same opacity the approval gate exists to remove.
+  if (state.retrieved.length > 0) {
+    body.append(el("p", "muted mono", "read before planning"));
+    const sources = el("ul");
+    for (const label of state.retrieved) sources.append(el("li", "mono", label));
+    body.append(sources);
+  }
+
   const list = el("ol");
   for (const step of state.steps) {
     const item = el("li");
@@ -293,6 +306,21 @@ function render(): void {
       el("span", "muted mono", `· ${state.context.used_tokens.toLocaleString()} tok`),
     );
   }
+  // Money, not just tokens. Both ride on `context.usage` because they are the
+  // same measurement -- splitting them would let a client show spend and tokens
+  // from different moments. The honesty rules from `sani_core.pricing` carry
+  // over: an unpriced model stays silent rather than showing "$0.00", which
+  // would read as "this was free", and a total built from estimated token counts
+  // is prefixed "~".
+  const cost = state.context?.cost;
+  if (cost && cost.total_usd !== null && cost.total_usd !== undefined) {
+    const tilde = cost.estimated ? "~" : "";
+    const spend = cost.total_usd < 0.01 ? `${tilde}<$0.01` : `${tilde}$${cost.total_usd.toFixed(2)}`;
+    const node = el("span", "muted mono", `\u00b7 ${spend}`);
+    node.title = `${cost.model ?? "unknown model"} \u00b7 ${cost.total_tokens.toLocaleString()} tokens over ${cost.calls} call${cost.calls === 1 ? "" : "s"}${cost.estimated ? " (token counts estimated)" : ""}`;
+    header.append(node);
+  }
+
   if (!state.connected && !state.ended) header.append(el("span", "bad mono", "· reconnecting"));
   body.append(header);
 

@@ -113,7 +113,13 @@ fi
 # The key's presence decides this. Defaulting to `scripted` when it is absent is
 # deliberate: the suite must stay reproducible with no API key, and a server
 # that silently failed every plan would be worse than one that replays a demo.
-if [ -s "$GROQ_FILE" ]; then
+# An explicit SANI_MODEL_BACKEND wins over inference from the key file. Running
+# the test suites needs the scripted planner even on a machine that has a Groq
+# key, and without this the only way to get it was to move the key file aside.
+if [ "${SANI_MODEL_BACKEND:-}" = "scripted" ]; then
+  export SANI_MODEL_BACKEND=scripted
+  BACKEND_NOTE="scripted (forced by SANI_MODEL_BACKEND) — fixed demo plan, ignores your task"
+elif [ -s "$GROQ_FILE" ]; then
   GROQ_API_KEY="$(tr -d '\n' < "$GROQ_FILE")"
 
   # Reject the placeholder from the instructions. Pasting the example verbatim is

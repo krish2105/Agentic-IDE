@@ -63,7 +63,24 @@ suite("Ṣāni' Studio extension", function (this: Mocha.Suite) {
     const root = workspaceRoot();
     writeFileSync(join(root, "README.md"), "# Demo project\n\nNothing here yet.\n");
     writeFileSync(join(root, "scratch.tmp"), "left over from a previous run\n");
-    await getApi();
+    const api = await getApi();
+
+    // These tests assert against the scripted planner's fixed plan -- the
+    // `file.delete` of scratch.tmp is what proves the always-confirm gate. Some
+    // of them go through `controller.start()`, which uses whatever backend the
+    // server defaults to, so a server running a real model makes them time out
+    // waiting for `blocked-on-approval`. That failure reads as a broken approval
+    // gate, which is the most alarming possible way to report a config choice.
+    const health = (await api.controller.api.health()) as {
+      model?: { backend?: string; scripted?: boolean };
+    };
+    if (health.model && health.model.scripted !== true) {
+      throw new Error(
+        `The server is running the '${health.model.backend}' backend. This suite needs the ` +
+          `scripted planner: start it with SANI_MODEL_BACKEND=scripted (or with no Groq key), ` +
+          `and point the run at it with SANI_TEST_SERVER_URL.`,
+      );
+    }
   });
 
   test("activates and contributes its commands", async () => {
@@ -149,6 +166,12 @@ suite("Ṣāni' Studio extension", function (this: Mocha.Suite) {
     const session = await api.controller.api.createSession({
       task: "clean up",
       workspace: root,
+      // Pinned: these assertions are about the demo script's fixed
+      // `file.delete` step. Against a real model the plan is whatever it says,
+      // there is no guaranteed gated action, and the failure surfaces as a
+      // timeout waiting for `blocked-on-approval` -- which reads as a broken
+      // approval gate rather than a server configured for real use.
+      model_backend: "scripted",
     });
     api.controller.attach(session.session_id, root);
 
@@ -181,6 +204,7 @@ suite("Ṣāni' Studio extension", function (this: Mocha.Suite) {
     const session = await api.controller.api.createSession({
       task: "tidy the scratch file",
       workspace: root,
+      model_backend: "scripted",
     });
     api.controller.attach(session.session_id, root);
 
@@ -199,8 +223,26 @@ suite("Ṣāni' Studio extension", function (this: Mocha.Suite) {
       "a score with no reasoning is a number to click past",
     );
 
+    // Every v2 field the reducer populates, asserted here rather than trusted.
+    // `cost` and `retrieved` were both arriving in the extension's state and
+    // being rendered by nothing -- which is precisely the drift this test claims
+    // to catch, and it did not, because it only looked at risk and critique.
+    assert.ok(blocked.context === null || "cost" in blocked.context, "context.usage must carry cost");
+    assert.ok(Array.isArray(blocked.retrieved), "retrieval must reach both surfaces");
+    assert.ok("critique" in (blocked.pending ?? {}), "critiques must reach both surfaces");
+
     await vscode.commands.executeCommand("sani.reject");
-    await waitForState(api, (state) => state.ended, "the session to finish");
+    const done = await waitForState(api, (state) => state.ended, "the session to finish");
+
+    // The token meter and the money come from one measurement, so a client that
+    // has one must have the other -- showing tokens alone leaves the reader
+    // converting against a rate they do not know.
+    if (done.context) {
+      assert.ok(
+        "used_tokens" in done.context,
+        "context.usage carries tokens and spend together; a surface with one must have both",
+      );
+    }
   });
 
   test("replay opens the session history at a chosen keyframe", async () => {
