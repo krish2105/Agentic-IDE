@@ -350,3 +350,18 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Provenance: agent-authored lines in the editor gutter.
+ *
+ * Same violet as every other agent-origin signal -- the whole point of the
+ * reserved channel is that this stripe means the same thing here as it does in
+ * a diff or a file tree.
+ */
+.agent-gutter {
+  /* Monaco puts the folding arrow at the same offset, so the stripe is pinned
+     to the far left of the margin rather than sharing that lane. */
+  background: var(--color-agent);
+  width: 3px !important;
+  left: 0 !important;
+}

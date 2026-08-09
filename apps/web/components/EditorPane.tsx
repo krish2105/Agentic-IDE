@@ -2,6 +2,7 @@
 
 import Editor, { loader } from "@monaco-editor/react";
 import { useEffect, useRef, useState } from "react";
+import { readToken } from "@/lib/tokens";
 
 // Serve Monaco from this origin rather than a CDN, so the editor works offline
 // and no third-party host sits in the load path of the main editing surface.
@@ -38,10 +39,22 @@ function languageFor(path: string): string {
   return LANGUAGE_BY_EXTENSION[path.split(".").pop()?.toLowerCase() ?? ""] ?? "plaintext";
 }
 
+/** One agent-authored run of lines, from GET /provenance. */
+export interface ProvenanceRange {
+  start: number;
+  end: number;
+  session_id: string;
+  model: string | null;
+  at: number;
+  confidence: number;
+}
+
 interface Props {
   tabs: OpenTab[];
   activePath: string | null;
   agentTouchedPaths: Set<string>;
+  /** Agent-authored ranges for the open file, keyed by path. */
+  provenance?: Record<string, ProvenanceRange[]>;
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
   onChange: (path: string, content: string) => void;
@@ -52,6 +65,7 @@ export function EditorPane({
   tabs,
   activePath,
   agentTouchedPaths,
+  provenance,
   onSelect,
   onClose,
   onChange,
@@ -66,6 +80,57 @@ export function EditorPane({
   saveRef.current = () => {
     if (activePath) onSave(activePath);
   };
+
+  // Monaco decorations for agent-authored lines. Held in a ref because the
+  // collection has to be mutated imperatively and must survive re-renders.
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
+  const decorationsRef = useRef<any>(null);
+  // A ref assignment does not re-render, so the decoration effect below
+  // would never re-run after the editor mounted and would silently paint
+  // nothing. This state is what wakes it up.
+  const [editorReady, setEditorReady] = useState(false);
+
+  const ranges = activePath ? provenance?.[activePath] : undefined;
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+
+    if (!decorationsRef.current) {
+      decorationsRef.current = editor.createDecorationsCollection([]);
+    }
+
+    if (!ranges || ranges.length === 0) {
+      decorationsRef.current.set([]);
+      return;
+    }
+
+    decorationsRef.current.set(
+      ranges.map((range) => ({
+        // Monaco lines are 1-based; provenance indices are 0-based.
+        range: new monaco.Range(range.start + 1, 1, range.end + 1, 1),
+        options: {
+          isWholeLine: true,
+          linesDecorationsClassName: "agent-gutter",
+          // Confidence is surfaced in words rather than as a faded colour:
+          // a dimmer stripe reads as a style choice, not as uncertainty.
+          hoverMessage: {
+            value: [
+              `**Agent-authored** — session \`${range.session_id}\``,
+              range.model ? `model: \`${range.model}\`` : null,
+              range.confidence < 1
+                ? `confidence ${(range.confidence * 100).toFixed(0)}% — this file has been edited since`
+                : "unchanged since the agent wrote it",
+            ]
+              .filter(Boolean)
+              .join("  \n"),
+          },
+        },
+      })),
+    );
+  }, [ranges, activePath, editorReady]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -136,15 +201,19 @@ export function EditorPane({
                   inherit: true,
                   rules: [],
                   colors: {
-                    "editor.background": "#0b0d12",
-                    "editorGutter.background": "#0b0d12",
-                    "editorLineNumber.foreground": "#626c7d",
-                    "editor.lineHighlightBackground": "#12151c",
+                    "editor.background": readToken("--color-base", "#0b0d12"),
+                    "editorGutter.background": readToken("--color-base", "#0b0d12"),
+                    "editorLineNumber.foreground": readToken("--color-ink-faint", "#626c7d"),
+                    "editor.lineHighlightBackground": readToken("--color-surface", "#12151c"),
                   },
                 });
                 setThemeReady(true);
               }}
               onMount={(editor, monaco) => {
+                editorRef.current = editor;
+                monacoRef.current = monaco;
+                decorationsRef.current = editor.createDecorationsCollection([]);
+                setEditorReady(true);
                 editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () =>
                   saveRef.current(),
                 );

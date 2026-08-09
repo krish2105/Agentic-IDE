@@ -3,6 +3,7 @@ import type {
   FileDiff,
   FileEntry,
   MissionControlRow,
+  ProvenanceRange,
   RagStatus,
   Session,
   TrustTier,
@@ -119,6 +120,19 @@ export function createApi(baseUrl: string, options: ApiOptions = {}) {
     kill: (id: string) => request<Session>(`/session/${id}/kill`, { method: "POST" }),
 
     diff: (id: string) => request<{ files: FileDiff[] }>(`/session/${id}/diff`),
+
+    /** Line-level attribution for a session's workspace. */
+    provenance: (sessionId: string) =>
+      request<{
+        workspace: string;
+        files: number;
+        total_lines: number;
+        agent_lines: number;
+        human_lines: number;
+        agent_pct: number;
+      } & { files: Record<string, { ranges: ProvenanceRange[]; agent_pct: number }> }>(
+        `/provenance?session_id=${encodeURIComponent(sessionId)}`,
+      ),
 
     /**
      * The replayable log plus its computed keyframes.

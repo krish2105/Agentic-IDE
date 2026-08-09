@@ -78,6 +78,17 @@ export interface RiskAssessment {
   factors: string[];
 }
 
+/** One agent-authored run of lines in a file. */
+export interface ProvenanceRange {
+  start: number;
+  end: number;
+  session_id: string;
+  model: string | null;
+  at: number;
+  /** Drops below 1 once the file has been edited around this range. */
+  confidence: number;
+}
+
 export type CritiqueVerdict = "looks-right" | "concerns" | "likely-wrong";
 
 /**

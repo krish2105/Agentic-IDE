@@ -9,7 +9,13 @@ import { SessionTabs } from "@/components/SessionTabs";
 import { StatusBar } from "@/components/StatusBar";
 import { TerminalPanel } from "@/components/TerminalPanel";
 import { api } from "@/lib/client";
-import type { FileEntry, MissionControlRow, Session, TrustTier } from "@sani/client";
+import type {
+  FileEntry,
+  MissionControlRow,
+  ProvenanceRange,
+  Session,
+  TrustTier,
+} from "@sani/client";
 import { useSessionStream } from "@/lib/useSessionStream";
 import { useReplay } from "@/lib/useReplay";
 import { useAmbientState } from "@/lib/useAmbientState";
@@ -39,6 +45,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   const [busy, setBusy] = useState(false);
   const [siblings, setSiblings] = useState<MissionControlRow[]>([]);
   const [trust, setTrust] = useState<Record<string, TrustTier>>({});
+  const [provenance, setProvenance] = useState<Record<string, ProvenanceRange[]>>({});
 
   useEffect(() => {
     api
@@ -92,6 +99,21 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   useEffect(() => {
     if (diffCount > 0) refreshTree();
   }, [diffCount, refreshTree]);
+
+  // Attribution only changes when the agent writes, so this follows the diff
+  // count rather than polling.
+  useEffect(() => {
+    api
+      .provenance(id)
+      .then((board) => {
+        const byPath: Record<string, ProvenanceRange[]> = {};
+        for (const [path, entry] of Object.entries(board.files ?? {})) {
+          byPath[path] = entry.ranges ?? [];
+        }
+        setProvenance(byPath);
+      })
+      .catch(() => undefined);
+  }, [id, diffCount]);
 
   // Reload an open tab when the agent rewrites the file underneath it, unless
   // the human has unsaved edits -- silently discarding those would be theft.
@@ -259,6 +281,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
         <div className="flex min-w-0 flex-1 flex-col">
           <EditorPane
+            provenance={provenance}
             tabs={tabs}
             activePath={activePath}
             agentTouchedPaths={stream.agentTouchedPaths}
