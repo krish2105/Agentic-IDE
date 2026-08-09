@@ -12,6 +12,7 @@ dependencies = []
 litellm = ["litellm>=1.50"]
 rag = ["tree-sitter>=0.23", "tree-sitter-language-pack>=0.7"]
 browser = ["playwright>=1.49"]
+pgvector = ["asyncpg>=0.29"]
 
 [build-system]
 requires = ["hatchling"]

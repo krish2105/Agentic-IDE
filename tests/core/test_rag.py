@@ -225,8 +225,8 @@ async def test_an_unindexed_workspace_queries_empty_rather_than_raising(tmp_path
 def test_store_selection_and_honesty():
     assert isinstance(build_vector_store("memory"), MemoryVectorStore)
     assert build_vector_store("memory").describe()["verified"] is True
-    # pgvector has never run against a live server; it must say so.
-    assert build_vector_store("pgvector").describe()["verified"] is False
+    # See tests/core/test_pgvector_store.py for the real, live-Postgres check.
+    assert build_vector_store("pgvector").describe()["verified"] is True
     with pytest.raises(ValueError, match="unknown vector store"):
         build_vector_store("faiss")
 

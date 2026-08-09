@@ -29,7 +29,8 @@ not who reaches the *API*.
 | Node 20+ and npm | Web IDE, VS Code extension, shared client | yes for the UI |
 | `redis-server` | Session persistence across restarts | optional |
 | Docker daemon | Container sandbox | optional, unverified |
-| Postgres + pgvector | Durable vector store | optional, unverified |
+| macOS + `sandbox-exec` | Container-free sandbox alternative | optional, no daemon needed |
+| Postgres + pgvector | Durable vector store | optional, verified in `tests/core/test_pgvector_store.py` when reachable |
 
 ```bash
 git clone https://github.com/krish2105/Agentic-IDE
@@ -416,17 +417,20 @@ npm run test:e2e       # 5 browser tests — both servers must be up first
 npm run typecheck      # all three TypeScript workspaces
 ```
 
-**Three components are built but have never executed.** Each reports its own
+**Two components are built but have never executed.** Each reports its own
 unverified state rather than letting you assume otherwise:
 
 | Component | How to verify | Reports |
 |---|---|---|
 | VS Code extension | `npm run test:vscode --workspace sani-vscode` | see TESTING.md |
 | Docker sandbox | `SANI_SANDBOX=docker`, then `docker ps` for `sani-<id>` | `verified: false` |
-| pgvector store | `SANI_VECTOR_STORE=pgvector` with `SANI_PG_DSN` | `verified: false` |
 
-If you are demoing this, running those three is the highest-value hour you can
-spend — it converts "believed to work" into "known to work".
+If you are demoing this, running those two is the highest-value hour you can
+spend — it converts "believed to work" into "known to work". The pgvector
+store used to be a third; it is now genuinely verified whenever a Postgres is
+reachable (`uv sync --extra pgvector`, then `uv run pytest tests/core/test_pgvector_store.py`),
+and on macOS the Docker sandbox now has a container-free alternative,
+`SANI_SANDBOX=sandbox-exec`, that is verified the same way.
 
 ---
 

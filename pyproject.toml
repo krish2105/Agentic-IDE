@@ -16,7 +16,8 @@ redis = ["sani-server[redis]"]
 rag = ["sani-core[rag]"]
 browser = ["sani-core[browser]"]
 litellm = ["sani-core[litellm]"]
-all = ["sani-server[redis]", "sani-core[rag]", "sani-core[browser]"]
+pgvector = ["sani-core[pgvector]"]
+all = ["sani-server[redis]", "sani-core[rag]", "sani-core[browser]", "sani-core[pgvector]"]
 
 [tool.uv]
 package = false
@@ -41,6 +42,7 @@ dev = [
     "tree-sitter>=0.23",
     "tree-sitter-language-pack>=0.7",
     "playwright>=1.49",
+    "asyncpg>=0.29",
 ]
 
 [tool.pytest.ini_options]

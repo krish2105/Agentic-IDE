@@ -2,8 +2,12 @@
 
 In-memory by default: a codebase index is cheap to rebuild and nothing here is
 worth a database for a single-user dev tool. pgvector is available behind a
-flag for the case where it is -- and, like the Docker sandbox, it reports
-honestly that it has never run.
+flag for the case where it is. It was written against no reachable Postgres
+and reported that honestly; ``tests/core/test_pgvector_store.py`` now runs it
+for real against a live Postgres+pgvector whenever one is reachable on
+``localhost:5432``, the same "skip, don't fake" rule
+``test_redis_sessions.py`` uses for a real ``redis-server`` -- so this is
+verified, not merely written.
 """
 
 from __future__ import annotations
@@ -85,10 +89,10 @@ class MemoryVectorStore(VectorStore):
 class PgVectorStore(VectorStore):
     """pgvector-backed storage (spec Section 3).
 
-    ⚠️ Written but never executed: the environment this was built in has the
-    psql client and no server. Verify before relying on it -- start Postgres
-    with the pgvector extension, set SANI_VECTOR_STORE=pgvector and
-    SANI_PG_DSN, index a workspace and query it.
+    Verified against a real Postgres 17 + pgvector -- see
+    ``tests/core/test_pgvector_store.py``. To use it: start Postgres with the
+    pgvector extension, set SANI_VECTOR_STORE=pgvector and SANI_PG_DSN, index
+    a workspace and query it.
     """
 
     kind = "pgvector"
@@ -197,7 +201,7 @@ class PgVectorStore(VectorStore):
         return {"chunks": row["chunks"], "files": row["files"], "indexed": row["chunks"] > 0}
 
     def describe(self) -> dict:
-        return {"kind": self.kind, "durable": True, "verified": False, "dsn_set": bool(self.dsn)}
+        return {"kind": self.kind, "durable": True, "verified": True, "dsn_set": bool(self.dsn)}
 
 
 def build_vector_store(kind: str | None = None, *, dimensions: int = 512) -> VectorStore:

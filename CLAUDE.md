@@ -3,10 +3,12 @@
 A dual-client agentic IDE (VS Code extension + web IDE) over one Python backend.
 **Every phase in the roadmap is built:** the agent core, the FastAPI server,
 the web IDE, the VS Code extension, codebase RAG, Redis-backed session
-persistence, the browser subagent, and the trust/Mission Control UI. ⚠️ Three
+persistence, the browser subagent, and the trust/Mission Control UI. ⚠️ Two
 things are written but unverified — the VS Code extension in a real editor,
-`DockerSandbox` against a daemon, and `PgVectorStore` against Postgres. Each
-says so in its own `describe()` or its TESTING doc.
+and `DockerSandbox` against a daemon. Each says so in its own `describe()` or
+its TESTING doc. (A third, `PgVectorStore` against Postgres, was in this list
+until it was actually run against a live Postgres+pgvector and now has a real
+test to prove it: `tests/core/test_pgvector_store.py`.)
 
 Read this before changing the server. The API contract and the safety model
 below are consumed by both clients; changing either is a breaking change for
@@ -231,8 +233,11 @@ by definitions rather than blank lines.
 search — but will not connect "authorise" to `check_permission`. It is the
 default because the suite must be reproducible with no API keys.
 
-⚠️ `PgVectorStore` has never run: this environment has the psql client and no
-server. It reports `verified: false`.
+`PgVectorStore` is verified against a real Postgres 17 + pgvector —
+`tests/core/test_pgvector_store.py` runs it for real whenever one is
+reachable on `localhost:5432` and skips otherwise, the same "skip, don't fake"
+rule `test_redis_sessions.py` uses for `redis-server`. Install it with
+`uv sync --extra pgvector`.
 
 Retrieval is per workspace, not per session, and is applied automatically to
 any session whose workspace is indexed. It emits `rag.retrieved` before
@@ -521,9 +526,10 @@ React 19.
 Three verification debts, all written and wired, none executed:
 
 1. the VS Code integration suite against a real editor (needs the VS Code CDN),
-2. `DockerSandbox` against a live daemon,
-3. `PgVectorStore` against a Postgres with pgvector.
+2. `DockerSandbox` against a live daemon.
 
 Each reports its own unverified state rather than letting a caller assume
-otherwise. Beyond those: a worker process so a restored session can resume
-rather than only be read, and auth — without it none of this can be exposed.
+otherwise. (`PgVectorStore` against Postgres was the third; it is now
+verified — see `tests/core/test_pgvector_store.py`.) Beyond those: a worker
+process so a restored session can resume rather than only be read, and auth —
+without it none of this can be exposed.
