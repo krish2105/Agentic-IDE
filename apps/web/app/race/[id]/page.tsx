@@ -55,7 +55,9 @@ function RacerCard({
           </span>
           {racer.status !== "unknown" && <StatusPill status={racer.status} />}
           {racer.approval_needed && (
-            <span className="pulse-attention ml-auto rounded-md bg-attention/15 px-2 py-0.5 text-[11px] text-attention">
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-attention/15 px-2 py-0.5 text-[11px] text-attention">
+              {/* Dot pulses, text does not — see the note in globals.css. */}
+              <span className="pulse-attention h-1.5 w-1.5 rounded-full bg-current" />
               needs you
             </span>
           )}

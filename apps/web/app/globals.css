@@ -311,7 +311,12 @@ body {
 }
 
 /* The ONLY looping animation permitted in the product. Everything else is
-   state-driven and settles. */
+   state-driven and settles.
+
+   **Never put this on an element containing text.** It animates opacity down to
+   0.55, which took the "needs approval" chip to 3.18:1 at the trough — below AA
+   for over half of every 1.8s cycle, on precisely the label whose job is to be
+   read. Pulse a sibling dot instead; every call site now does. */
 .pulse-attention {
   animation: pulse-attention 1.8s var(--ease-settle) infinite;
 }

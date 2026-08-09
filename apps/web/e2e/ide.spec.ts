@@ -12,7 +12,7 @@ import { expect, test } from "@playwright/test";
 import { mkdtempSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SERVER, preflight } from "./preflight";
+import { CONNECTION, SERVER, authHeaders, preflight } from "./preflight";
 
 function makeWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), "sani-e2e-"));
@@ -29,13 +29,14 @@ test.describe("Ṣāni' Studio web IDE", () => {
   // actually uses, so the suite exercises the real path and does not depend on
   // how the dev server happened to be started.
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript((server) => {
-      window.localStorage.setItem("sani.serverUrl", server);
+    await page.addInitScript((connection) => {
+      window.localStorage.setItem("sani.serverUrl", connection.server);
+      if (connection.token) window.localStorage.setItem("sani.authToken", connection.token);
       // 3D off: WebGL in headless Chromium is slow and flaky, and every
       // surface is required to be fully usable without it. If a test needs the
       // 3D path it can opt back in.
       window.localStorage.setItem("sani.quality", "off");
-    }, SERVER);
+    }, CONNECTION);
   });
 
   test("plan, block on an irreversible action, approve, and see the result", async ({
@@ -158,7 +159,7 @@ test.describe("Ṣāni' Studio web IDE", () => {
 
     const created = await fetch(`${SERVER}/session`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ task: "trust ladder check", workspace, script: [] }),
     });
     const { session_id: sessionId } = await created.json();
@@ -184,7 +185,7 @@ test.describe("Ṣāni' Studio web IDE", () => {
     for (const task of ["first parallel session", "second parallel session"]) {
       const created = await fetch(`${SERVER}/session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ task, workspace, script: [] }),
       });
       ids.push((await created.json()).session_id);
@@ -271,7 +272,7 @@ test.describe("Ṣāni' Studio web IDE", () => {
 
     const created = await fetch(`${SERVER}/session`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders() },
       body: JSON.stringify({ task: "editor save check", workspace, script: [] }),
     });
     const { session_id: sessionId } = await created.json();

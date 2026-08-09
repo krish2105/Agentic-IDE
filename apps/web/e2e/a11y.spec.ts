@@ -19,7 +19,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SERVER, preflight } from "./preflight";
+import { CONNECTION, SERVER, authHeaders, preflight } from "./preflight";
 
 const THEMES = ["void", "nebula", "aurora", "solar", "mono", "daylight"] as const;
 
@@ -32,6 +32,7 @@ function makeWorkspace(): string {
 
 async function blockedSession(page: Page): Promise<string> {
   const response = await page.request.post(`${SERVER}/session`, {
+    headers: authHeaders(),
     data: { task: "add a greeting module", workspace: makeWorkspace() },
   });
   const { session_id } = await response.json();
@@ -103,10 +104,11 @@ test.describe("accessibility", () => {
   test.beforeAll(preflight);
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript((server) => {
-      window.localStorage.setItem("sani.serverUrl", server);
+    await page.addInitScript((connection) => {
+      window.localStorage.setItem("sani.serverUrl", connection.server);
+      if (connection.token) window.localStorage.setItem("sani.authToken", connection.token);
       window.localStorage.setItem("sani.quality", "off");
-    }, SERVER);
+    }, CONNECTION);
   });
 
   // --- contrast, on every theme ----------------------------------------
@@ -119,6 +121,13 @@ test.describe("accessibility", () => {
       await page.goto("/");
       await expect(page.getByTestId("landing-hero")).toBeVisible();
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+
+      // Wait for the board's first poll to land *before* settling. Mission
+      // Control refreshes every 2s and staggers new rows in from opacity 0; on
+      // an empty first paint `settle()` has nothing to wait for and returns
+      // immediately, so the rows can start fading in underneath the scan and
+      // fail contrast on colours that are fine once they arrive.
+      await expect(page.getByTestId("board-summary")).toContainText("total");
 
       const results = await scan(page);
       expect(describe(results), `${theme}: ${serious(results).length} violation(s)`).toBe("");
@@ -212,15 +221,47 @@ test.describe("accessibility", () => {
     expect(fakes).toEqual([]);
   });
 
+  test("no looping animation fades text below AA", async ({ page }) => {
+    // `settle()` deliberately does not wait for infinite animations, or it would
+    // never return -- which means axe samples them at a random phase and this
+    // class of bug shows up as an intermittent contrast failure rather than as
+    // itself. So assert the rule directly instead.
+    //
+    // It caught a real one: the "needs approval" chip pulsed its own opacity to
+    // 0.55, taking the text to 3.18:1 for most of every cycle.
+    await blockedSession(page);
+    await page.goto("/");
+    await expect(page.getByTestId("board-summary")).toContainText("total");
+
+    const offenders = await page.evaluate(() =>
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations === Infinity)
+        .map((a) => (a.effect as KeyframeEffect | null)?.target as HTMLElement | undefined)
+        .filter((el): el is HTMLElement => !!el)
+        // Text content of its own, not merely a descendant's -- a wrapper that
+        // pulses a dot is exactly the shape we want.
+        .filter((el) =>
+          [...el.childNodes].some(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+          ),
+        )
+        .map((el) => `${el.tagName.toLowerCase()}.${el.className} — "${el.textContent?.trim()}"`),
+    );
+
+    expect(offenders, "looping opacity animations must not carry text").toEqual([]);
+  });
+
   // --- reduced motion ---------------------------------------------------
 
   test("reduced motion removes animation rather than shortening it", async ({ browser }) => {
     const context = await browser.newContext({ reducedMotion: "reduce" });
     const page = await context.newPage();
-    await page.addInitScript((server) => {
-      window.localStorage.setItem("sani.serverUrl", server);
+    await page.addInitScript((connection) => {
+      window.localStorage.setItem("sani.serverUrl", connection.server);
+      if (connection.token) window.localStorage.setItem("sani.authToken", connection.token);
       window.localStorage.setItem("sani.quality", "off");
-    }, SERVER);
+    }, CONNECTION);
 
     await page.goto("/");
     await expect(page.getByTestId("landing-hero")).toBeVisible();

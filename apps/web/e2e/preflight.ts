@@ -22,6 +22,25 @@
 export const SERVER = process.env.SANI_SERVER_URL ?? "http://127.0.0.1:8000";
 export const WEB = process.env.SANI_WEB_URL ?? "http://127.0.0.1:3000";
 
+/**
+ * Set when the server under test has `SANI_AUTH_TOKEN`.
+ *
+ * Empty is the normal local case and stays the default. It matters because the
+ * moment the backend is exposed over a tunnel it *must* have a token -- the
+ * shell adapter executes commands -- and the suite should keep working against
+ * that server rather than only against an open one.
+ */
+export const TOKEN = process.env.SANI_AUTH_TOKEN ?? "";
+
+/** Headers a request needs to be let through. */
+export function authHeaders(): Record<string, string> {
+  return TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {};
+}
+
+/** Seeds the app's own runtime connection settings, as the page would store
+ *  them. Used by every spec's `beforeEach`. */
+export const CONNECTION = { server: SERVER, token: TOKEN };
+
 async function reachable(url: string, what: string, hint: string): Promise<void> {
   try {
     await fetch(url);
@@ -38,11 +57,20 @@ export async function preflight(): Promise<void> {
   );
   await reachable(WEB, "The web IDE", `Start it with: npm run dev --workspace sani-web`);
 
-  // The browser only sends the token on a real request; a preflight OPTIONS is
-  // enough to see whether the origin is allowed at all.
+  // Auth middleware sits *outside* CORS on purpose -- it has to, or the
+  // WebSocket routes would be unguarded -- so an unauthenticated 401 carries no
+  // CORS headers at all. Sending the token first keeps this check measuring the
+  // thing it is named after rather than reporting a CORS fault for a missing
+  // token.
   const response = await fetch(`${SERVER}/mission-control`, {
-    headers: { Origin: WEB },
+    headers: { Origin: WEB, ...authHeaders() },
   });
+  if (response.status === 401) {
+    throw new Error(
+      `The server rejected the token (401).\n` +
+        `  It has SANI_AUTH_TOKEN set; run the suite with the same value in SANI_AUTH_TOKEN.`,
+    );
+  }
   const allowed = response.headers.get("access-control-allow-origin");
   if (allowed !== WEB && allowed !== "*") {
     throw new Error(

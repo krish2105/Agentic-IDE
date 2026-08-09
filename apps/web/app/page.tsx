@@ -181,7 +181,11 @@ function SessionRow({ row }: { row: MissionControlRow }) {
           </p>
         </div>
         {row.approval_needed && (
-          <span className="pulse-attention shrink-0 rounded-md bg-attention/15 px-2 py-0.5 text-[11px] text-attention">
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-attention/15 px-2 py-0.5 text-[11px] text-attention">
+            {/* The dot pulses, not the chip. Fading the whole chip took these
+                words to 3.18:1 at the trough -- half of every cycle spent below
+                AA, on the one label that exists to be noticed. */}
+            <span className="pulse-attention h-1.5 w-1.5 rounded-full bg-current" />
             needs approval
           </span>
         )}

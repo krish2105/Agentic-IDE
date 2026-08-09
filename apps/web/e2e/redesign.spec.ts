@@ -15,7 +15,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SERVER, preflight } from "./preflight";
+import { CONNECTION, SERVER, authHeaders, preflight } from "./preflight";
 
 function makeWorkspace(): string {
   const dir = mkdtempSync(join(tmpdir(), "sani-e2e-"));
@@ -28,6 +28,7 @@ function makeWorkspace(): string {
  *  mid-plan position, and the only place the risk dial is on screen. */
 async function blockedSession(page: Page): Promise<string> {
   const response = await page.request.post(`${SERVER}/session`, {
+    headers: authHeaders(),
     data: { task: "add a greeting module", workspace: makeWorkspace() },
   });
   const { session_id } = await response.json();
@@ -50,13 +51,14 @@ test.describe("Glass Cockpit", () => {
   test.beforeAll(preflight);
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript((server) => {
-      window.localStorage.setItem("sani.serverUrl", server);
+    await page.addInitScript((connection) => {
+      window.localStorage.setItem("sani.serverUrl", connection.server);
+      if (connection.token) window.localStorage.setItem("sani.authToken", connection.token);
       // Every assertion below is written against the no-3D path on purpose:
       // `off` is a first-class design target, not a degraded mode, and it is
       // what reduced-motion users and weak GPUs actually get.
       window.localStorage.setItem("sani.quality", "off");
-    }, SERVER);
+    }, CONNECTION);
   });
 
   // --- risk -------------------------------------------------------------
@@ -204,6 +206,7 @@ test.describe("Glass Cockpit", () => {
     await git("commit", "-m", "initial");
 
     const response = await page.request.post(`${SERVER}/race`, {
+      headers: authHeaders(),
       data: { task: "add a greeting module", workspace, count: 2 },
     });
     expect(response.status()).toBe(201);
@@ -231,6 +234,9 @@ test.describe("Glass Cockpit", () => {
     await expect(outcome).toContainText(racers[0].worktree);
 
     await page.screenshot({ path: "e2e/screenshots/13-race-kept.png" });
-    await page.request.post(`${SERVER}/race/${race_id}/discard`, { data: {} });
+    await page.request.post(`${SERVER}/race/${race_id}/discard`, {
+      headers: authHeaders(),
+      data: {},
+    });
   });
 });
