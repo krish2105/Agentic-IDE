@@ -17,6 +17,7 @@
 # Usage:
 #   scripts/install-service.sh              # install and start
 #   WITH_AUTH=1 scripts/install-service.sh  # require a bearer token
+#   WITH_AUTH=1 EXTRA_ORIGINS=https://foo.vercel.app scripts/install-service.sh
 #   scripts/install-service.sh --uninstall  # stop and remove
 
 set -euo pipefail
@@ -40,6 +41,13 @@ chmod 700 "$HOME/.sani"
 AUTH_ENV=""
 [ "${WITH_AUTH:-}" = "1" ] || AUTH_ENV="SANI_NO_AUTH=1"
 
+# Baked into the plist, not read from the environment at run time: launchd starts
+# the job with its own minimal environment, so anything expected to arrive from
+# your shell arrives empty. A hosted origin missing from the CORS list is
+# invisible -- the WebSocket still connects, so the page loads and only the
+# fetches fail, which the browser reports as a network error.
+EXTRA_ORIGINS="${EXTRA_ORIGINS:-}"
+
 # `bash -lc` so the login PATH is present: serve.sh shells out to curl, lsof and
 # python3, and a launchd job starts with a minimal environment.
 cat > "$PLIST" <<PLIST_EOF
@@ -52,7 +60,7 @@ cat > "$PLIST" <<PLIST_EOF
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>cd '$REPO' && PORT=$PORT $AUTH_ENV EXTRA_ORIGINS="\${SANI_EXTRA_ORIGINS:-}" exec ./scripts/serve.sh</string>
+    <string>cd '$REPO' && PORT=$PORT $AUTH_ENV EXTRA_ORIGINS='$EXTRA_ORIGINS' exec ./scripts/serve.sh</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -72,6 +80,7 @@ echo "installed $LABEL"
 echo "  plist : $PLIST"
 echo "  log   : $LOG"
 echo "  auth  : $([ "${WITH_AUTH:-}" = "1" ] && echo "on (token in ~/.sani/auth-token)" || echo "off — loopback only, no tunnel")"
+echo "  extra origins : ${EXTRA_ORIGINS:-none beyond localhost}"
 echo
 echo "waiting for it to come up…"
 for _ in $(seq 1 20); do
