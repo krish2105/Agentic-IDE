@@ -39,6 +39,13 @@ uv sync        # Python workspace
 npm install    # all three TypeScript workspaces, from the root
 ```
 
+> **macOS: do not clone into `~/Desktop` or `~/Documents`** if iCloud Drive's
+> "Desktop & Documents" sync is on. iCloud sets the hidden flag on the `.venv`
+> tree, and Python silently ignores hidden `.pth` files — so every editable
+> install stops resolving and you get `ModuleNotFoundError: No module named
+> 'sani_server'` with a `.venv` that looks perfectly intact. `chflags -R
+> nohidden .venv` repairs it; cloning somewhere unsynced avoids it.
+
 ---
 
 ## 2. The 60-second start

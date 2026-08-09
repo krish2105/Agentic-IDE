@@ -559,10 +559,18 @@ chflags -R nohidden .venv                           # the actual fix, instant
 fresh files are not hidden yet, and the flag comes back — which is exactly why
 it kept recurring. `chflags` repairs it in place with no reinstall.
 
-The flag is applied *after* the venv is created, minutes later, to all 149
-files at once. This checkout lives under `~/Desktop`, so an iCloud
-Desktop-and-Documents sync is the likely culprit; moving the repo outside
-`~/Desktop` would remove the cause rather than the symptom.
+The flag was applied *after* the venv was created, minutes later, to all 149
+files at once. The cause was iCloud: the checkout used to live under
+`~/Desktop`, and iCloud Desktop-and-Documents sync is on for this machine.
+
+**The repo now lives in `~/Projects/`, which iCloud does not sync.** Keep it out
+of `~/Desktop` and `~/Documents` — both are mirrored. A venv cannot survive in
+an iCloud-synced directory anyway: sync also evicts files to make space and
+rewrites them, which a virtualenv full of absolute paths and binaries will not
+tolerate.
+
+If the symptom ever returns, check the flag first (`ls -lO`) before touching the
+environment. A fresh `uv sync` will "fix" it and mislead you.
 
 **The `client` fixture must stay a context manager.** `with TestClient(app)`
 starts one blocking portal that persists across requests. Without it every
