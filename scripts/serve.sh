@@ -171,7 +171,17 @@ else
 fi
 
 # --- CORS -------------------------------------------------------------------
-ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3200,http://127.0.0.1:3200"
+# 3000 through 3003, both spellings, because `next dev` silently takes the next
+# free port when 3000 is busy — and the resulting CORS block is invisible: the
+# WebSocket is not CORS-checked, so the page loads and the stream connects while
+# every fetch fails, which the browser reports to JS as a plain network error and
+# the UI renders as "cannot reach the server". A server that is running fine.
+# 3200 is the port the e2e suite uses.
+ORIGINS=""
+for port in 3000 3001 3002 3003 3200; do
+  ORIGINS="$ORIGINS,http://localhost:$port,http://127.0.0.1:$port"
+done
+ORIGINS="${ORIGINS#,}"
 if [ -n "${EXTRA_ORIGINS:-}" ]; then
   ORIGINS="$EXTRA_ORIGINS,$ORIGINS"
 fi
