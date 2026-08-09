@@ -539,11 +539,30 @@ app. Plus 45 shared-client tests and 31 Playwright tests.
 --experimental-strip-types`. On Node 20 it fails with `bad option`, which looks
 like a broken script and is not one.
 
-**`ModuleNotFoundError: No module named 'sani_server'` means the editable
-install desynced**, not that anything is wrong with the code. The `.pth` files
-in `.venv` look correct when this happens, which sends you down a rabbit hole.
-`rm -rf .venv && uv sync --extra litellm` is the fix; a targeted
-`--reinstall-package` is not enough.
+### ⚠️ `ModuleNotFoundError: No module named 'sani_server'` — it is macOS, not uv
+
+Diagnosed properly after roughly eight rebuilds. **The `.venv` tree gets macOS's
+`UF_HIDDEN` flag set on it, and CPython's `site.addpackage` silently skips
+hidden `.pth` files.** The editable installs stop being found; nothing reports
+an error.
+
+It is maximally deceptive: the `.pth` files exist, contain the right absolute
+path, and that path exists. `site.addsitedir()` called by hand still refuses to
+add it. Only `os.lstat(...).st_flags` shows why.
+
+```bash
+ls -lO .venv/lib/python3.12/site-packages | head    # "hidden" in column 5
+chflags -R nohidden .venv                           # the actual fix, instant
+```
+
+**Do not `rm -rf .venv && uv sync` for this.** It appears to work only because
+fresh files are not hidden yet, and the flag comes back — which is exactly why
+it kept recurring. `chflags` repairs it in place with no reinstall.
+
+The flag is applied *after* the venv is created, minutes later, to all 149
+files at once. This checkout lives under `~/Desktop`, so an iCloud
+Desktop-and-Documents sync is the likely culprit; moving the repo outside
+`~/Desktop` would remove the cause rather than the symptom.
 
 **The `client` fixture must stay a context manager.** `with TestClient(app)`
 starts one blocking portal that persists across requests. Without it every
