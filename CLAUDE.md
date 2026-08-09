@@ -110,6 +110,7 @@ Added in Phase 3 (v2) for replay:
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/session/{id}/timeline` | GET | The replayable log plus computed keyframes. Takes `from_seq`. |
+| `/provenance` | GET | Line-level attribution per workspace. Takes `workspace` or `session_id`. |
 
 The Section 7 contract is now complete.
 
@@ -382,6 +383,36 @@ streak and revokes it.
 check rather than trusting the stored flag. Once a snapshot has been through
 Redis it is untrusted input, and that is the one place a corrupted record could
 otherwise widen the tier.
+
+### Provenance (v2)
+
+`sani_core.provenance` answers "which lines did the agent write, which did
+you". It is **derived from the diffs the agent already emitted**, not tracked in
+a parallel structure — the diffs are the record, and this is a projection of
+them, so the two cannot disagree.
+
+Attribution is stored per line, not as ranges. Ranges are more compact but far
+harder to remap correctly, and remapping correctness is the whole feature;
+ranges are derived on the way out for the UI.
+
+**The honesty rule:** attribution that silently drifts is worse than none,
+because it still looks authoritative. So a human editing around agent code
+carries the attribution forward (a human adding an import above a function has
+not un-written that function) but pays a confidence decay, and past a floor the
+claim is dropped entirely rather than guessed at.
+
+Per workspace, not per session — several sessions edit one repo over time, and
+the reviewer's question is about the repo.
+
+### Self-critique (v2)
+
+`sani_core.critic` reviews a diff before it reaches the human, targeting the
+documented top failure of 2026 agentic coding: output that *looks* right.
+
+Advisory and off by default. It cannot approve, reject or delay anything, it
+costs a second inference that shows up in the meter, and `ScriptedCritic` keeps
+the suite reproducible with no API key — the same reasoning as the scripted
+planner.
 
 ### Blast radius (v2)
 

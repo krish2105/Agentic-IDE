@@ -3,6 +3,7 @@ from . import (
     diff,
     lifecycle,
     mission_control,
+    provenance,
     rag,
     sessions,
     stream,
@@ -24,6 +25,7 @@ ROUTERS = [
     terminal.router,
     rag.router,
     timeline.router,
+    provenance.router,
 ]
 
 __all__ = ["ROUTERS"]
