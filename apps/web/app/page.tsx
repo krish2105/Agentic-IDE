@@ -1,10 +1,17 @@
 "use client";
 
+import type { MissionControlRow } from "@sani/client";
+import { AnimatePresence, motion } from "motion/react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConnectionPanel } from "@/components/ConnectionPanel";
 import { StatusPill } from "@/components/StatusBar";
+import { useAppearance } from "@/components/system/ThemeProvider";
+import { CommandHint } from "@/components/system/CommandPalette";
+import { Button } from "@/components/ui/Button";
+import { GlassPanel } from "@/components/ui/GlassPanel";
 import {
   ApiError,
   api,
@@ -13,15 +20,24 @@ import {
   explainProblem,
   onConnectionChange,
 } from "@/lib/client";
-import type { MissionControlRow } from "@sani/client";
+import { rise, springs, stagger, staggerChild, useGatedMotion } from "@/lib/motion";
+import { allows3D } from "@/lib/quality";
+import { useAmbientState } from "@/lib/useAmbientState";
 
 const POLL_MS = 2000;
+
+// 3D is always code-split and never blocks the shell from becoming interactive.
+const AmbientField = dynamic(() => import("@/components/three/AmbientField"), { ssr: false });
+const MissionControl3D = dynamic(() => import("@/components/three/MissionControl3D"), {
+  ssr: false,
+});
 
 function NewSessionForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [task, setTask] = useState("");
   const [workspace, setWorkspace] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const variants = useGatedMotion(rise);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -41,45 +57,115 @@ function NewSessionForm({ onCreated }: { onCreated: (id: string) => void }) {
   };
 
   return (
-    <form onSubmit={submit} className="rounded-lg border border-edge bg-surface p-4">
-      <h2 className="mb-3 text-sm font-semibold text-ink">New session</h2>
-      <div className="flex flex-col gap-3 sm:flex-row">
+    <motion.form
+      onSubmit={submit}
+      variants={variants}
+      initial="hidden"
+      animate="visible"
+      className="glass-elevated rounded-2xl p-1.5"
+    >
+      <div className="flex flex-col gap-1.5 md:flex-row">
         <input
           value={task}
           onChange={(event) => setTask(event.target.value)}
           placeholder="What should the agent do?"
           data-testid="task-input"
-          className="flex-1 rounded border border-edge bg-base px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-edge-strong"
+          className="min-w-0 flex-1 rounded-xl bg-base/40 px-4 py-3.5 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-base/70"
         />
         <input
           value={workspace}
           onChange={(event) => setWorkspace(event.target.value)}
           placeholder="Workspace path (optional)"
           data-testid="workspace-input"
-          className="w-full rounded border border-edge bg-base px-3 py-2 font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus:border-edge-strong sm:w-80"
+          className="rounded-xl bg-base/40 px-4 py-3.5 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-faint focus:bg-base/70 md:w-72"
         />
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="lg"
           disabled={busy || !task.trim()}
           data-testid="create-session"
-          className="rounded bg-ink px-4 py-2 text-sm font-medium text-base hover:opacity-90 disabled:opacity-40"
+          className="rounded-xl px-7"
         >
           {busy ? "Starting…" : "Start"}
-        </button>
+        </Button>
       </div>
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
-    </form>
+      <AnimatePresence>
+        {error && (
+          <motion.p
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-4 pb-2 pt-2 text-xs text-danger"
+          >
+            {error}
+          </motion.p>
+        )}
+      </AnimatePresence>
+    </motion.form>
+  );
+}
+
+function SessionRow({ row }: { row: MissionControlRow }) {
+  return (
+    <motion.li variants={staggerChild} layout>
+      <Link
+        href={`/session/${row.session_id}`}
+        data-testid={`session-row-${row.session_id}`}
+        className="group flex items-center gap-4 rounded-xl border border-edge bg-surface/60 px-4 py-3 transition-all hover:border-edge-strong hover:bg-surface"
+      >
+        <StatusPill status={row.status} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm text-ink">{row.task}</p>
+          <p className="mt-0.5 truncate font-mono text-[11px] text-ink-faint">
+            {row.current_step_description ??
+              (row.total_steps ? `${row.total_steps} steps` : "planning")}
+          </p>
+        </div>
+        {row.approval_needed && (
+          <span className="pulse-attention shrink-0 rounded-md bg-attention/15 px-2 py-0.5 text-[11px] text-attention">
+            needs approval
+          </span>
+        )}
+        {row.detached && (
+          <span
+            className="shrink-0 rounded-md bg-edge px-2 py-0.5 text-[11px] text-ink-faint"
+            title="Restored from the archive: readable history, no running executor"
+          >
+            archived
+          </span>
+        )}
+        {row.active_tool && (
+          <span className="shrink-0 font-mono text-[11px] text-ink-faint">{row.active_tool}</span>
+        )}
+        <span className="shrink-0 font-mono text-[11px] text-ink-faint">
+          {row.total_steps > 0 &&
+            `${(row.current_step ?? row.total_steps) + (row.status === "complete" ? 0 : 1)}/${row.total_steps} · `}
+          {row.elapsed_s.toFixed(1)}s
+        </span>
+      </Link>
+    </motion.li>
   );
 }
 
 export default function MissionControl() {
   const router = useRouter();
+  const { quality } = useAppearance();
   const [rows, setRows] = useState<MissionControlRow[]>([]);
   const [summary, setSummary] = useState({ active: 0, awaiting: 0, store: "memory" });
   const [offline, setOffline] = useState(false);
   const [status, setStatus] = useState<number | null>(null);
   const [showConnection, setShowConnection] = useState(false);
   const [server, setServer] = useState("");
+  const [spatial, setSpatial] = useState(true);
+
+  const listVariants = useGatedMotion(stagger);
+
+  // The landing page has no single session, so the ambient field reflects the
+  // board: amber and breathing the moment anything is waiting on a human.
+  useAmbientState(
+    summary.awaiting > 0 ? "blocked-on-approval" : summary.active > 0 ? "executing" : null,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -115,46 +201,88 @@ export default function MissionControl() {
   }, [refresh]);
 
   const problem = diagnose(server, status);
+  const canRender3D = allows3D(quality) && rows.length > 0;
+  const showSpatial = canRender3D && spatial;
+
+  const openSession = useCallback(
+    (sessionId: string) => router.push(`/session/${sessionId}`),
+    [router],
+  );
+
+  const headline = useMemo(() => "Watch it think.".split(" "), []);
 
   return (
-    <main className="h-full overflow-auto bg-base">
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <header className="mb-8">
-          <h1 className="text-xl font-semibold tracking-tight text-ink">Ṣāni&apos; Studio</h1>
-          <p className="mt-1 text-sm text-ink-dim">
-            Agent sessions. Plans are shown before they run, and irreversible actions always
-            stop for you.
-          </p>
+    <main className="relative h-full overflow-auto">
+      <AmbientField />
+
+      <div className="mx-auto max-w-6xl px-6 pb-20 pt-16 md:pt-24">
+        <header className="mb-10">
+          <div className="mb-5 flex items-center gap-3">
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">
+              Ṣāni&apos; Studio
+            </span>
+            <span className="h-px flex-1 bg-edge" />
+            <CommandHint />
+          </div>
+
+          {/* Kinetic headline: variable weight settles per word. Hero only --
+              this treatment never appears in the work surface. */}
+          <h1 className="flex flex-wrap gap-x-4 text-5xl leading-[0.95] tracking-tight text-ink md:text-7xl">
+            {headline.map((word, index) => (
+              <motion.span
+                key={word}
+                initial={{ opacity: 0, y: 24, fontVariationSettings: '"wght" 300' }}
+                animate={{ opacity: 1, y: 0, fontVariationSettings: '"wght" 700' }}
+                transition={{ ...springs.weighty, delay: 0.08 * index }}
+                className="inline-block"
+              >
+                {word}
+              </motion.span>
+            ))}
+          </h1>
+
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35, duration: 0.5 }}
+            className="mt-5 max-w-xl text-[15px] leading-relaxed text-ink-dim"
+          >
+            Every plan is shown before it runs. Every tool call is disclosed, including
+            the ones that were auto-approved. Irreversible actions stop and wait for you —
+            at any trust level, with no exceptions.
+          </motion.p>
         </header>
 
-        {offline && (
-          <div
-            className="mb-6 rounded border border-danger/40 bg-danger/10 px-4 py-3 text-xs leading-relaxed text-danger"
-            data-testid="offline-banner"
-          >
-            {explainProblem(problem, server)}
-            {/* Only suggest starting a local server when a local server is
-                actually what this page is trying to reach. On a hosted page
-                that advice sends people to fix the wrong thing. */}
-            {problem === "unreachable" && (
-              <>
-                {" "}
-                If it should be local, start it with{" "}
-                <code className="font-mono">
-                  uv run uvicorn sani_server.app:app --port 8000
-                </code>
-                .
-              </>
-            )}
-            <button
-              onClick={() => setShowConnection(true)}
-              data-testid="open-connection"
-              className="ml-2 underline hover:no-underline"
+        <AnimatePresence>
+          {offline && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-xs leading-relaxed text-danger"
+              data-testid="offline-banner"
             >
-              Change connection
-            </button>
-          </div>
-        )}
+              {explainProblem(problem, server)}
+              {/* Only suggest starting a local server when a local server is
+                  actually what this page is trying to reach. On a hosted page
+                  that advice sends people to fix the wrong thing. */}
+              {problem === "unreachable" && (
+                <>
+                  {" "}
+                  If it should be local, start it with{" "}
+                  <code className="font-mono">uv run uvicorn sani_server.app:app --port 8000</code>.
+                </>
+              )}
+              <button
+                onClick={() => setShowConnection(true)}
+                data-testid="open-connection"
+                className="ml-2 underline hover:no-underline"
+              >
+                Change connection
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <ConnectionPanel
           open={showConnection}
@@ -162,12 +290,12 @@ export default function MissionControl() {
           onSaved={refresh}
         />
 
-        <div className="mb-8">
-          <NewSessionForm onCreated={(id) => router.push(`/session/${id}`)} />
+        <div className="mb-12">
+          <NewSessionForm onCreated={openSession} />
         </div>
 
-        <div className="mb-3 flex items-baseline gap-4">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-2">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
             Mission Control
           </h2>
           <span className="font-mono text-[11px] text-ink-dim" data-testid="board-summary">
@@ -176,10 +304,32 @@ export default function MissionControl() {
               <span className="text-attention"> · {summary.awaiting} awaiting you</span>
             )}
           </span>
+
+          {canRender3D && (
+            <div className="flex items-center gap-1 rounded-lg border border-edge p-0.5">
+              <Button
+                size="sm"
+                variant={spatial ? "outline" : "ghost"}
+                onClick={() => setSpatial(true)}
+                aria-pressed={spatial}
+              >
+                Spatial
+              </Button>
+              <Button
+                size="sm"
+                variant={!spatial ? "outline" : "ghost"}
+                onClick={() => setSpatial(false)}
+                aria-pressed={!spatial}
+              >
+                List
+              </Button>
+            </div>
+          )}
+
           <button
             onClick={() => setShowConnection((value) => !value)}
             data-testid="connection-toggle"
-            className="ml-auto font-mono text-[11px] text-ink-faint hover:text-ink"
+            className="ml-auto font-mono text-[11px] text-ink-faint transition-colors hover:text-ink"
             title={server}
           >
             {server.replace(/^https?:\/\//, "")}
@@ -197,53 +347,45 @@ export default function MissionControl() {
         </div>
 
         {rows.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-edge px-4 py-10 text-center text-sm text-ink-faint">
+          <GlassPanel
+            elevation={0}
+            animate
+            className="rounded-xl border border-dashed border-edge px-4 py-16 text-center text-sm text-ink-faint"
+          >
             No sessions yet.
-          </p>
+          </GlassPanel>
+        ) : showSpatial ? (
+          <div className="space-y-3">
+            <div className="h-[440px] overflow-hidden rounded-2xl border border-edge bg-base/30">
+              <MissionControl3D sessions={rows} onOpen={openSession} />
+            </div>
+            <p className="text-center font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+              depth = recency · glow = activity · halo = awaiting you · click to open
+            </p>
+            {/* The spatial view is a visualisation, not the record. The list
+                stays in the DOM for screen readers and keyboard users. */}
+            <ul className="sr-only" data-testid="session-list">
+              {rows.map((row) => (
+                <li key={row.session_id}>
+                  <Link href={`/session/${row.session_id}`}>
+                    {row.task} — {row.status}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : (
-          <ul className="space-y-2" data-testid="session-list">
+          <motion.ul
+            className="space-y-2"
+            data-testid="session-list"
+            variants={listVariants}
+            initial="hidden"
+            animate="visible"
+          >
             {rows.map((row) => (
-              <li key={row.session_id}>
-                <Link
-                  href={`/session/${row.session_id}`}
-                  data-testid={`session-row-${row.session_id}`}
-                  className="flex items-center gap-4 rounded-lg border border-edge bg-surface px-4 py-3 hover:border-edge-strong"
-                >
-                  <StatusPill status={row.status} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-ink">{row.task}</p>
-                    <p className="mt-0.5 truncate font-mono text-[11px] text-ink-faint">
-                      {row.current_step_description ??
-                        (row.total_steps ? `${row.total_steps} steps` : "planning")}
-                    </p>
-                  </div>
-                  {row.approval_needed && (
-                    <span className="shrink-0 rounded bg-attention/15 px-2 py-0.5 text-[11px] text-attention pulse-attention">
-                      needs approval
-                    </span>
-                  )}
-                  {row.detached && (
-                    <span
-                      className="shrink-0 rounded bg-edge px-2 py-0.5 text-[11px] text-ink-faint"
-                      title="Restored from the archive: readable history, no running executor"
-                    >
-                      archived
-                    </span>
-                  )}
-                  {row.active_tool && (
-                    <span className="shrink-0 font-mono text-[11px] text-ink-faint">
-                      {row.active_tool}
-                    </span>
-                  )}
-                  <span className="shrink-0 font-mono text-[11px] text-ink-faint">
-                    {row.total_steps > 0 &&
-                      `${(row.current_step ?? row.total_steps) + (row.status === "complete" ? 0 : 1)}/${row.total_steps} · `}
-                    {row.elapsed_s.toFixed(1)}s
-                  </span>
-                </Link>
-              </li>
+              <SessionRow key={row.session_id} row={row} />
             ))}
-          </ul>
+          </motion.ul>
         )}
       </div>
     </main>
