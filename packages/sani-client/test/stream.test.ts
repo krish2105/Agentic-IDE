@@ -322,3 +322,39 @@ test("subscribers are notified and a malformed frame does not kill the stream", 
   assert.equal(sockets[0].closed, false);
   stream.dispose();
 });
+
+test("risk.assessed is held until the approval it describes arrives", () => {
+  // The two events are separate frames but one moment. Rendering a score on its
+  // own -- before the user knows what is being asked -- would be noise.
+  const withRisk = reduceEvent(
+    initialStreamState,
+    event("risk.assessed", {
+      action_id: "act_1",
+      risk: { score: 80, band: "critical", factors: ["irreversible"] },
+    }),
+  );
+  assert.equal(withRisk.pending, null, "a score alone is not a request");
+
+  const withApproval = reduceEvent(
+    withRisk,
+    event("approval.required", {
+      action: { id: "act_1", action_type: "file.delete", summary: "Delete x" },
+      decision: { reason: "always-confirm" },
+    }),
+  );
+  assert.equal(withApproval.pending?.risk?.score, 80);
+  assert.equal(withApproval.pending?.risk?.band, "critical");
+});
+
+test("an approval with no assessment still renders", () => {
+  // Older servers do not emit risk.assessed. The gate must not depend on it.
+  const state = reduceEvent(
+    initialStreamState,
+    event("approval.required", {
+      action: { id: "act_2", action_type: "file.delete", summary: "Delete y" },
+      decision: { reason: "always-confirm" },
+    }),
+  );
+  assert.ok(state.pending);
+  assert.equal(state.pending?.risk, undefined);
+});

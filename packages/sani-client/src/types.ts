@@ -30,6 +30,7 @@ export type EventType =
   | "agent.message.done"
   | "tool.proposed"
   | "approval.required"
+  | "risk.assessed"
   | "approval.resolved"
   | "tool.result"
   | "diff.generated"
@@ -58,11 +59,31 @@ export interface Hunk {
   lines: string[];
 }
 
+export type RiskBand = "low" | "medium" | "high" | "critical";
+
+/**
+ * Blast radius for one proposed action, computed server-side before anything
+ * runs. Advisory: it informs a human decision and never gates by itself.
+ */
+export interface RiskAssessment {
+  score: number;
+  band: RiskBand;
+  reversible: boolean;
+  always_confirm: boolean;
+  reaches_network: boolean;
+  leaves_workspace: boolean;
+  lines_changed: number;
+  files_touched: number;
+  factors: string[];
+}
+
 export interface FileDiff {
   path: string;
   unified: string;
   is_new_file: boolean;
   is_delete: boolean;
+  additions?: number;
+  deletions?: number;
   hunks: Hunk[];
 }
 
@@ -105,6 +126,19 @@ export interface TrustTier {
   promotion_threshold: number;
 }
 
+/** Running spend. `total_usd` is null when the model has no published rate --
+ *  never 0, which would read as "this was free". */
+export interface CostUsage {
+  model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  calls: number;
+  total_usd: number | null;
+  priced: boolean;
+  estimated: boolean;
+}
+
 export interface ContextUsage {
   used_tokens: number;
   limit_tokens: number;
@@ -112,6 +146,7 @@ export interface ContextUsage {
   should_compact: boolean;
   estimated: boolean;
   model?: string;
+  cost?: CostUsage;
 }
 
 export interface Session {

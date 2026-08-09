@@ -20,10 +20,12 @@ from collections.abc import Awaitable, Callable
 
 from .actions import ProposedAction
 from .approvals import ApprovalRegistry
+from .context import estimate_tokens
 from .events import Event, EventType
 from .models.base import ModelAdapter
 from .permissions import evaluate
 from .plan import PlanStep, StepStatus
+from .risk import assess
 from .session import AgentSession, SessionStatus
 from .tools.base import ToolAdapter, ToolError
 
@@ -113,6 +115,15 @@ class Executor:
             )
             self.session.plan = plan
             self.session.context.add(self.session.task + plan.rationale)
+            # The planner's prompt is input, its rationale is output. Both are
+            # estimated until a backend hands back real usage numbers, and the
+            # meter records that so the total is never shown as exact.
+            self.session.cost.model = self.model.model_name
+            self.session.cost.record(
+                input_tokens=estimate_tokens(self.session.task + context),
+                output_tokens=estimate_tokens(plan.rationale),
+                estimated=True,
+            )
             await self._emit(EventType.AGENT_MESSAGE_DONE, {"text": plan.rationale})
             await self._emit(EventType.PLAN_PROPOSED, {"plan": plan.to_dict()})
 
@@ -128,9 +139,16 @@ class Executor:
                 await self._run_step(step)
 
                 await self._emit(EventType.PLAN_STEP_COMPLETED, {"step": step.to_dict()})
+                # Cost rides along with the token meter rather than getting its
+                # own event: they are the same measurement, and splitting them
+                # would let a client show tokens and spend from different moments.
                 await self._emit(
                     EventType.CONTEXT_USAGE,
-                    {**self.session.context.to_dict(), "model": self.model.model_name},
+                    {
+                        **self.session.context.to_dict(),
+                        "model": self.model.model_name,
+                        "cost": self.session.cost.to_dict(),
+                    },
                 )
 
             self.session.current_step = None
@@ -218,6 +236,16 @@ class Executor:
 
         pending = self.registry.create(action)
         self.session.pending_action = action
+
+        # Blast radius, computed before anything runs. Advisory only: it informs
+        # the human decision and never gates, widens the always-confirm tier, or
+        # auto-approves. Emitted first so a client can render the stakes and the
+        # request together rather than popping a score in afterwards.
+        await self._emit(
+            EventType.RISK_ASSESSED,
+            {"action_id": action.id, "risk": assess(action).to_dict()},
+        )
+
         await self._emit(
             EventType.APPROVAL_REQUIRED,
             {

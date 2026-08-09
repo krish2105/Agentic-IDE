@@ -33,6 +33,13 @@ async def create_session(
 
 @router.get("/session/{session_id}")
 async def get_session(session_id: str, manager: SessionManager = Depends(get_manager)) -> dict:
-    """Session status, current plan and trust tier state."""
+    """Session status, current plan, trust tier state and live watcher count."""
     record = manager.get(session_id)
-    return record.session.to_dict()
+    payload = record.session.to_dict()
+
+    # Presence deliberately rides here rather than on the event stream. The log
+    # is history -- what the agent did, replayable forever. Who happens to be
+    # watching is ephemeral state about right now, and putting it in the log
+    # would make a replay re-enact viewers arriving and leaving.
+    payload["watchers"] = record.hub.subscriber_count if record.hub else 0
+    return payload

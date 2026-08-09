@@ -25,6 +25,7 @@ class EventType(str, Enum):
     AGENT_MESSAGE_DONE = "agent.message.done"
     TOOL_PROPOSED = "tool.proposed"
     APPROVAL_REQUIRED = "approval.required"
+    RISK_ASSESSED = "risk.assessed"
     APPROVAL_RESOLVED = "approval.resolved"
     TOOL_RESULT = "tool.result"
     DIFF_GENERATED = "diff.generated"

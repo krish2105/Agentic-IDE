@@ -13,6 +13,7 @@ import type {
   Plan,
   PlanStep,
   ProposedAction,
+  RiskAssessment,
   SaniEvent,
   SessionStatus,
 } from "./types.ts";
@@ -32,6 +33,8 @@ export interface ChatItem {
 export interface PendingApproval {
   action: ProposedAction;
   decision: Decision;
+  /** Blast radius, when the server assessed it. Older servers omit this. */
+  risk?: RiskAssessment;
 }
 
 export interface StreamState {
@@ -44,6 +47,10 @@ export interface StreamState {
   steps: PlanStep[];
   currentStep: number | null;
   pending: PendingApproval | null;
+  /** Assessments keyed by action id. risk.assessed arrives just before the
+   *  approval it describes, so it is parked here until they can be shown
+   *  together. */
+  riskByAction: Record<string, RiskAssessment>;
   diffs: Record<string, FileDiff>;
   chat: ChatItem[];
   context: ContextUsage | null;
@@ -62,6 +69,7 @@ export const initialStreamState: StreamState = {
   steps: [],
   currentStep: null,
   pending: null,
+  riskByAction: {},
   diffs: {},
   chat: [],
   context: null,
@@ -135,8 +143,25 @@ export function reduceEvent(state: StreamState, event: SaniEvent): StreamState {
       return next;
     }
 
+    case "risk.assessed":
+      // Arrives just before approval.required, so it is parked until the
+      // approval it describes shows up. Holding it rather than rendering it
+      // alone keeps the stakes and the request on screen together.
+      next.riskByAction = {
+        ...state.riskByAction,
+        [event.data.action_id]: event.data.risk,
+      };
+      if (next.pending && next.pending.action.id === event.data.action_id) {
+        next.pending = { ...next.pending, risk: event.data.risk };
+      }
+      return next;
+
     case "approval.required":
-      next.pending = { action: event.data.action, decision: event.data.decision };
+      next.pending = {
+        action: event.data.action,
+        decision: event.data.decision,
+        risk: state.riskByAction[event.data.action.id],
+      };
       return next;
 
     case "approval.resolved":

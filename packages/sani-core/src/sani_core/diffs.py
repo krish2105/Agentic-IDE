@@ -62,6 +62,23 @@ class FileDiff:
     is_new_file: bool = False
     is_delete: bool = False
 
+    @property
+    def additions(self) -> int:
+        """Lines added, counted from the hunks rather than tracked separately.
+
+        Derived rather than stored so it cannot drift out of sync with the
+        hunks after a per-hunk accept/reject.
+        """
+        return sum(
+            1 for hunk in self.hunks for line in hunk.lines if line.startswith("+")
+        )
+
+    @property
+    def deletions(self) -> int:
+        return sum(
+            1 for hunk in self.hunks for line in hunk.lines if line.startswith("-")
+        )
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "FileDiff":
         return cls(
@@ -78,6 +95,8 @@ class FileDiff:
             "unified": self.unified,
             "is_new_file": self.is_new_file,
             "is_delete": self.is_delete,
+            "additions": self.additions,
+            "deletions": self.deletions,
             "hunks": [h.to_dict() for h in self.hunks],
         }
 

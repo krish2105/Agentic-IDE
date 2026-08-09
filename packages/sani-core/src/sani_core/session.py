@@ -16,6 +16,7 @@ from pathlib import Path
 
 from .actions import ProposedAction
 from .context import ContextWindow
+from .pricing import CostMeter
 from .diffs import FileDiff
 from .permissions import TrustLadder
 from .plan import Plan
@@ -57,6 +58,8 @@ class AgentSession:
     history: list[dict] = field(default_factory=list)
     trust: TrustLadder = field(default_factory=TrustLadder)
     context: ContextWindow = field(default_factory=ContextWindow)
+    #: Running spend. Tokens were already counted; this prices them.
+    cost: CostMeter = field(default_factory=CostMeter)
     #: Keyed by path so a file edited twice shows one cumulative diff.
     diffs: dict[str, FileDiff] = field(default_factory=dict)
     pending_action: ProposedAction | None = None
@@ -97,6 +100,7 @@ class AgentSession:
             "pending_action": self.pending_action.to_dict() if self.pending_action else None,
             "trust": self.trust.to_dict(),
             "context": self.context.to_dict(),
+            "cost": self.cost.to_dict(),
             "diffs": [d.to_dict() for d in self.diffs.values()],
             "error": self.error,
             "created_at": self.created_at,

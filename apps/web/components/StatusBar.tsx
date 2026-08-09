@@ -72,6 +72,35 @@ function ContextMeter({ context }: { context: ContextUsage | null }) {
   );
 }
 
+/**
+ * Live spend.
+ *
+ * Shows tokens always, money only when the model has a known rate. An unpriced
+ * model reports no cost rather than $0.00 -- zero would read as "this was
+ * free", which is a different and wrong claim. A total built from estimated
+ * token counts is prefixed `~` so a number nobody can stand behind is never
+ * displayed as though someone can.
+ */
+function CostMeter({ context }: { context: ContextUsage | null }) {
+  const cost = context?.cost;
+  if (!cost || cost.calls === 0) return null;
+
+  return (
+    <span
+      className="hidden shrink-0 font-mono tabular-nums text-ink-faint 2xl:inline"
+      title={
+        cost.priced
+          ? `${cost.input_tokens.toLocaleString()} in / ${cost.output_tokens.toLocaleString()} out over ${cost.calls} call(s) on ${cost.model}`
+          : `No published rate for ${cost.model ?? "this model"} — tokens counted, cost unknown`
+      }
+    >
+      {cost.total_usd !== null && cost.total_usd !== undefined
+        ? `${cost.estimated ? "~" : ""}$${cost.total_usd.toFixed(4)}`
+        : `${cost.total_tokens.toLocaleString()} tok`}
+    </span>
+  );
+}
+
 interface Props {
   task: string;
   status: SessionStatus;
@@ -120,6 +149,7 @@ export function StatusBar({
       </span>
 
       <ContextMeter context={context} />
+      <CostMeter context={context} />
 
       <span className="hidden shrink-0 font-mono text-ink-faint lg:inline" title={workspace}>
         {sandbox ?? "…"} · {workspace.split("/").slice(-1)[0]}

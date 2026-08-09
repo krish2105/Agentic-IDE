@@ -303,6 +303,7 @@ Every frame:
 | `agent.message.delta` | Each token of planning reasoning. |
 | `agent.message.done` | Reasoning finished. |
 | `rag.retrieved` | Code was read from the index, **before** planning. |
+| `risk.assessed` | Blast radius for an action, **before** `approval.required`. |
 | `plan.proposed` | Full plan, **before** any execution. |
 | `plan.step.started` / `plan.step.completed` | Per step. |
 | `tool.proposed` | Before every action — **including auto-approved ones**. |
@@ -381,6 +382,41 @@ streak and revokes it.
 check rather than trusting the stored flag. Once a snapshot has been through
 Redis it is untrusted input, and that is the one place a corrupted record could
 otherwise widen the tier.
+
+### Blast radius (v2)
+
+`sani_core.risk.assess()` scores a proposed action before anything runs: what
+it reaches, how much changes, whether it can be undone. It rides on
+`risk.assessed`, emitted immediately before `approval.required` so a client can
+render the stakes and the request together.
+
+**It is advisory and must stay that way.** It never gates, never widens the
+always-confirm tier, and never auto-approves — `permissions.evaluate()` remains
+the only chokepoint. There is a test asserting a score changes no decision.
+
+It runs on the proposal only, because `propose()` is side-effect free: nothing
+in `risk.py` may execute, fetch, or mutate anything.
+
+The factors are the feature; the score is only their summary. A bare number is
+something to click past, which is the failure this exists to prevent.
+
+### Cost (v2)
+
+`sani_core.pricing` turns the token meter into money, shipped on
+`context.usage` rather than its own event — they are the same measurement, and
+splitting them would let a client show tokens and spend from different moments.
+
+**An unpriced model reports `total_usd: null`, never `0.0`.** Zero would read as
+"this was free", which is a different and wrong claim. Totals built from
+estimated token counts are flagged `estimated` and rendered with a `~`.
+
+### Presence (v2)
+
+Watcher counts ride on `GET /session/{id}` and the mission-control rows, **not**
+on the event stream. The log is history — what the agent did, replayable
+forever. Who happens to be watching is ephemeral state about right now, and
+putting it in the log would make a replay re-enact viewers arriving and
+leaving. There is a test asserting presence never reaches the log.
 
 ### Where it is enforced
 

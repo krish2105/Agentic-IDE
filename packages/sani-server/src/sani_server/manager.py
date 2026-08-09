@@ -330,10 +330,14 @@ class SessionManager:
         return self.trust(session_id)
 
     def mission_control(self) -> dict:
-        rows = [r.session.to_mission_control_row() for r in self.list()]
-        detached = {r.session.id for r in self.list() if r.detached}
+        records = self.list()
+        rows = [r.session.to_mission_control_row() for r in records]
+        detached = {r.session.id for r in records if r.detached}
+        # Presence is live state, not history -- see routes/sessions.py.
+        watchers = {r.session.id: r.hub.subscriber_count for r in records if r.hub}
         for row in rows:
             row["detached"] = row["session_id"] in detached
+            row["watchers"] = watchers.get(row["session_id"], 0)
         return {
             "sessions": rows,
             "active": sum(1 for r in rows if r["status"] not in ("complete", "failed", "killed")),
