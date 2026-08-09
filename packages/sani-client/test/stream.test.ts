@@ -212,6 +212,29 @@ test("the stream reconnects from the last sequence it saw", async () => {
   stream.dispose();
 });
 
+test("from_seq is appended with & when the url already has a query string", () => {
+  // wsUrl() puts ?token=... on the base URL when auth is on. A bare
+  // `?from_seq=` on top of that produces two `?` in one URL, which every
+  // browser WebSocket constructor rejects outright -- and silently, from the
+  // caller's perspective: connect() throws, so onopen/onmessage never fire
+  // and the UI is stuck wherever the reducer's initial state left it.
+  const sockets: FakeSocket[] = [];
+  const stream = new SessionStream(
+    "ws://x/session/s/stream?token=secret",
+    (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+  );
+
+  stream.connect();
+
+  assert.equal(sockets[0].url, "ws://x/session/s/stream?token=secret&from_seq=0");
+  assert.equal((sockets[0].url.match(/\?/g) ?? []).length, 1);
+  stream.dispose();
+});
+
 test("a finished session is not reconnected to", async () => {
   const sockets: FakeSocket[] = [];
   const stream = new SessionStream(

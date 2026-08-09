@@ -70,7 +70,13 @@ export class SessionStream {
 
     // Reconnect from the last sequence seen, so the server replays exactly what
     // was missed. reduceEvent drops any overlap, so this is safe to repeat.
-    const socket = this.createSocket(`${this.wsUrl}?from_seq=${this.state.lastSeq}`);
+    //
+    // wsUrl may already carry a `?token=...` query string (auth enabled), so a
+    // bare `?from_seq=` here would produce a second `?` -- a URL every browser
+    // WebSocket constructor rejects outright. This only ever showed up with
+    // auth on, which the test suite doesn't exercise by default.
+    const separator = this.wsUrl.includes("?") ? "&" : "?";
+    const socket = this.createSocket(`${this.wsUrl}${separator}from_seq=${this.state.lastSeq}`);
     this.socket = socket;
 
     socket.onopen = () => this.emit({ ...this.state, connected: true });
