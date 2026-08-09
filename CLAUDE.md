@@ -105,6 +105,12 @@ Added in Phase 3 for RAG:
 | `/rag/query` | POST | Retrieve chunks. The same call the planner makes. |
 | `/rag/status` | GET | What is indexed, and what is doing the indexing. |
 
+Added in Phase 3 (v2) for replay:
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/session/{id}/timeline` | GET | The replayable log plus computed keyframes. Takes `from_seq`. |
+
 The Section 7 contract is now complete.
 
 ### `POST /session`
@@ -329,6 +335,22 @@ Statuses: `planning` · `executing` · `blocked-on-approval` · `paused` ·
    `session.error`, the server closes with code 1000. Multiple clients may
    subscribe to one session; they all receive identical frames.
 
+### Replay (v2)
+
+`GET /session/{id}/timeline` returns the same log the stream replays from, so
+the scrubber and a reconnecting client can never disagree about what happened.
+Keyframes -- the handful of seqs worth jumping between -- are computed in
+`sani_core.replay`, **not** in a client: two surfaces deciding independently
+what "mattered" in a run is two chances to decide differently.
+
+The client folds history through the *same* `reduceEvent` it uses live
+(`foldTo` in `@sani/client`). A replay that folded its own way would be a
+second definition of what a session is, free to drift, and the bug would
+surface as "the scrubber disagrees with the live view".
+
+While scrubbing, `pending` is forced to null. An approval from the past is
+history, not a live decision, and must never render actionable buttons.
+
 6. **New event *types* are additive, not breaking.** `rag.retrieved` was added
    in Phase 3 without a version bump: the envelope is unchanged and clients
    ignore types they do not know (there is a test for that). Bump
@@ -424,6 +446,13 @@ Reading from the socket to prove nothing arrives hangs forever. See
 
 **To test something mid-plan, park it on an approval first.** That is the only
 point where the executor's position is deterministic.
+
+**`SessionStream.connect()` clears a prior `dispose()`.** React runs effects
+mount → cleanup → mount in development, and the adapter memoises the stream per
+session id, so the same object is disposed and then reconnected. Treating
+dispose as permanent made that second connect a silent no-op and left the whole
+session view blank -- in dev only, which is where it hides longest. There is a
+regression test.
 
 **WebSocket teardown must not await.** Starlette's test client cancels the
 app's task scope immediately after sending its disconnect, so any cleanup that

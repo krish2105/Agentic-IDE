@@ -1,6 +1,9 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { springs } from "@/lib/motion";
 import type { PendingApproval } from "@/lib/useSessionStream";
 import { DiffView } from "./DiffView";
 
@@ -11,9 +14,24 @@ interface Props {
   busy: boolean;
 }
 
+/**
+ * The approval card.
+ *
+ * This is the surface the entire product exists to render well. Everything
+ * else is instrumentation; this is the moment a human is asked to take
+ * responsibility for something irreversible, and it has to make the stakes
+ * legible in about two seconds.
+ *
+ * Structure, in the order the eye should travel:
+ *   1. what is being asked, and why it stopped
+ *   2. what will actually happen (command, diff, where it runs)
+ *   3. what rejecting costs
+ *   4. the decision
+ */
 export function ApprovalCard({ pending, onApprove, onReject, busy }: Props) {
   const { action, decision } = pending;
   const hunks = action.diff?.hunks ?? [];
+  const runsIn = (action.preview as Record<string, any> | undefined)?.runs_in;
 
   // Default to accepting everything: the common case is "yes, do it", and
   // making the user re-tick every hunk to get there would train them to click
@@ -36,55 +54,102 @@ export function ApprovalCard({ pending, onApprove, onReject, busy }: Props) {
   const partial = hunks.length > 0 && !allSelected;
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={springs.settle}
       data-testid="approval-card"
       data-action-type={action.action_type}
-      className="rounded-md border border-attention/50 bg-attention/[0.06] p-3"
+      className="glass-elevated relative overflow-hidden rounded-xl border-attention/40"
     >
-      <div className="mb-2 flex items-center gap-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-attention pulse-attention" />
-        <span className="text-xs font-semibold text-attention">Approval required</span>
-        <code className="ml-auto rounded bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink-dim">
-          {action.action_type}
-        </code>
-      </div>
+      {/* Amber edge light. The card should feel lit from within rather than
+          outlined -- an outline reads as a warning box, and this is a request. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-attention to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-attention/[0.04]" />
 
-      <p className="mb-1 text-sm text-ink" data-testid="approval-summary">
-        {action.summary}
-      </p>
-      <p className="mb-3 text-[11px] text-ink-faint">{decision.reason}</p>
-
-      {action.preview?.command && (
-        <pre className="mb-3 overflow-x-auto rounded border border-edge bg-base px-3 py-2 font-mono text-[11px] text-ink">
-          $ {action.preview.command}
-        </pre>
-      )}
-
-      {action.diff && hunks.length > 0 && (
-        <div className="mb-3">
-          <DiffView diff={action.diff} selectedHunks={selected} onToggleHunk={toggle} />
+      <div className="relative p-3.5">
+        <div className="mb-2.5 flex items-center gap-2">
+          <span className="pulse-attention h-1.5 w-1.5 rounded-full bg-attention" />
+          <span className="text-xs font-semibold tracking-tight text-attention">
+            Waiting on you
+          </span>
+          <code className="ml-auto rounded-md bg-base/60 px-1.5 py-0.5 font-mono text-[10px] text-ink-dim">
+            {action.action_type}
+          </code>
         </div>
-      )}
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => onApprove(partial ? Array.from(selected) : null)}
-          disabled={busy}
-          data-testid="approve-button"
-          className="rounded bg-ok/20 px-3 py-1.5 text-xs font-medium text-ok hover:bg-ok/30 disabled:opacity-40"
-        >
-          {partial ? `Approve ${selected.size} of ${hunks.length} hunks` : "Approve"}
-        </button>
-        <button
-          onClick={onReject}
-          disabled={busy}
-          data-testid="reject-button"
-          className="rounded border border-edge px-3 py-1.5 text-xs text-ink-dim hover:border-danger hover:text-danger disabled:opacity-40"
-        >
-          Reject
-        </button>
-        <span className="ml-auto font-mono text-[10px] text-ink-faint">{action.id}</span>
+        <p className="mb-1.5 text-sm leading-snug text-ink" data-testid="approval-summary">
+          {action.summary}
+        </p>
+        <p className="mb-3 text-[11px] leading-relaxed text-ink-faint">{decision.reason}</p>
+
+        {action.preview?.command && (
+          <div className="mb-3">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                Command
+              </span>
+              {/* Where a command lands is part of the decision, not a detail:
+                  "host" and "container" are different risks entirely. */}
+              {runsIn && (
+                <span
+                  className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                    runsIn.isolated
+                      ? "bg-ok/15 text-ok"
+                      : "bg-attention/15 text-attention"
+                  }`}
+                  title={
+                    runsIn.isolated
+                      ? "Runs inside the session sandbox"
+                      : "Runs directly on this machine, as the server user"
+                  }
+                >
+                  {runsIn.isolated ? "sandboxed" : "on host"}
+                </span>
+              )}
+            </div>
+            <pre className="overflow-x-auto rounded-lg border border-edge bg-base/70 px-3 py-2 font-mono text-[11px] text-ink">
+              $ {action.preview.command}
+            </pre>
+          </div>
+        )}
+
+        {action.diff && hunks.length > 0 && (
+          <div className="mb-3">
+            <DiffView diff={action.diff} selectedHunks={selected} onToggleHunk={toggle} />
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="attention"
+            size="sm"
+            onClick={() => onApprove(partial ? Array.from(selected) : null)}
+            disabled={busy}
+            data-testid="approve-button"
+          >
+            {partial ? `Approve ${selected.size} of ${hunks.length}` : "Approve"}
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={onReject}
+            disabled={busy}
+            data-testid="reject-button"
+          >
+            Reject
+          </Button>
+
+          {/* What rejecting costs. Without this the safe-looking button is the
+              one whose consequences are least visible. */}
+          <span className="text-[10px] leading-tight text-ink-faint">
+            Rejecting skips this step; the plan continues.
+          </span>
+
+          <span className="ml-auto font-mono text-[10px] text-ink-faint">{action.id}</span>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

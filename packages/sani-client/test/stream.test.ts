@@ -235,6 +235,49 @@ test("from_seq is appended with & when the url already has a query string", () =
   stream.dispose();
 });
 
+test("connect after dispose revives the stream (React StrictMode remount)", () => {
+  // React runs effects mount -> cleanup -> mount in development. The adapter
+  // memoises the stream per session id, so the *same* object gets disposed and
+  // then reconnected. If dispose were permanent the second connect would be a
+  // silent no-op and the session view would stay blank forever -- in dev only,
+  // which is exactly where it hides longest.
+  const sockets: FakeSocket[] = [];
+  const stream = new SessionStream("ws://x/session/s/stream", (url) => {
+    const socket = new FakeSocket(url);
+    sockets.push(socket);
+    return socket;
+  });
+
+  stream.connect();
+  assert.equal(sockets.length, 1);
+
+  stream.dispose();
+  stream.connect();
+
+  assert.equal(sockets.length, 2, "a disposed stream must reconnect on demand");
+  stream.dispose();
+});
+
+test("dispose stops the reconnect timer rather than merely marking a flag", async () => {
+  const sockets: FakeSocket[] = [];
+  const stream = new SessionStream(
+    "ws://x/session/s/stream",
+    (url) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    },
+    1,
+  );
+
+  stream.connect();
+  stream.dispose();
+  sockets[0].close();
+
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(sockets.length, 1, "a disposed stream must not resurrect itself");
+});
+
 test("a finished session is not reconnected to", async () => {
   const sockets: FakeSocket[] = [];
   const stream = new SessionStream(

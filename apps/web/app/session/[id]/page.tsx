@@ -11,10 +11,23 @@ import { TerminalPanel } from "@/components/TerminalPanel";
 import { api } from "@/lib/client";
 import type { FileEntry, MissionControlRow, Session, TrustTier } from "@sani/client";
 import { useSessionStream } from "@/lib/useSessionStream";
+import { useReplay } from "@/lib/useReplay";
+import { useAmbientState } from "@/lib/useAmbientState";
+import { useRegisterCommands } from "@/lib/commands";
+import { ReplayScrubber } from "@/components/ReplayScrubber";
 
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const stream = useSessionStream(id);
+  const replay = useReplay(id, stream.ended);
+
+  // While scrubbing, every panel reads the reconstructed past instead of the
+  // live present. One swap here rather than a replay branch in each panel.
+  const view = replay.state ?? stream;
+
+  // The shell breathes with whatever is being shown -- live status, or the
+  // status at the scrubbed moment.
+  useAmbientState(view.status);
 
   const [session, setSession] = useState<Session | null>(null);
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -158,12 +171,69 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       }
     });
 
+  // Everything this session can do, reachable from ⌘K. Registered here rather
+  // than in the palette so a command can never outlive the surface that owns it.
+  useRegisterCommands(
+    `session:${id}`,
+    [
+      {
+        id: "session:approve",
+        label: "Approve pending action",
+        group: "Review" as const,
+        keywords: "accept allow yes",
+        disabled: !pendingActionId,
+        run: () => {
+          if (pendingActionId) void withBusy(() => api.approve(id, pendingActionId, null));
+        },
+      },
+      {
+        id: "session:reject",
+        label: "Reject pending action",
+        group: "Review" as const,
+        keywords: "deny refuse no",
+        disabled: !pendingActionId,
+        run: () => {
+          if (pendingActionId) void withBusy(() => api.reject(id, pendingActionId));
+        },
+      },
+      {
+        id: "session:replay",
+        label: replay.active ? "Exit replay — back to live" : "Replay this session",
+        group: "Review" as const,
+        keywords: "timeline scrub history rewind time travel",
+        run: () => (replay.active ? replay.exit() : replay.enter()),
+      },
+      {
+        id: "session:pause",
+        label: "Pause session",
+        group: "Session" as const,
+        keywords: "halt suspend",
+        run: () => withBusy(() => api.pause(id)),
+      },
+      {
+        id: "session:resume",
+        label: "Resume session",
+        group: "Session" as const,
+        keywords: "continue unpause",
+        run: () => withBusy(() => api.resume(id)),
+      },
+      {
+        id: "session:kill",
+        label: "Kill session",
+        group: "Danger" as const,
+        keywords: "stop terminate abort",
+        run: () => withBusy(() => api.kill(id)),
+      },
+    ],
+    [id, pendingActionId, replay.active],
+  );
+
   return (
     <div className="flex h-screen flex-col">
       <StatusBar
         task={session?.task ?? "…"}
-        status={stream.status}
-        context={stream.context}
+        status={view.status}
+        context={view.context}
         workspace={session?.workspace ?? ""}
         connected={stream.connected}
         sandbox={sandboxKind}
@@ -171,6 +241,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         onPause={() => withBusy(() => api.pause(id))}
         onResume={() => withBusy(() => api.resume(id))}
         onKill={() => withBusy(() => api.kill(id))}
+        replayActive={replay.active}
+        onReplay={() => (replay.active ? replay.exit() : replay.enter())}
       />
 
       <SessionTabs sessions={siblings} activeId={id} />
@@ -213,12 +285,12 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         </div>
 
         <RightDock
-          chat={stream.chat}
-          streaming={stream.streamingMessage}
-          steps={stream.steps}
-          currentStep={stream.currentStep}
-          diffs={stream.diffs}
-          pending={stream.pending}
+          chat={view.chat}
+          streaming={view.streamingMessage}
+          steps={view.steps}
+          currentStep={view.currentStep}
+          diffs={view.diffs}
+          pending={replay.active ? null : stream.pending}
           trust={trust}
           onTrustToggle={toggleTrust}
           srcFor={(path) => api.rawFileUrl(id, path)}
@@ -232,6 +304,8 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           }
         />
       </div>
+
+      <ReplayScrubber replay={replay} />
     </div>
   );
 }

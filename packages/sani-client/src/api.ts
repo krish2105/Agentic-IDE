@@ -1,3 +1,4 @@
+import type { Timeline } from "./replay.ts";
 import type {
   FileDiff,
   FileEntry,
@@ -118,6 +119,16 @@ export function createApi(baseUrl: string, options: ApiOptions = {}) {
     kill: (id: string) => request<Session>(`/session/${id}/kill`, { method: "POST" }),
 
     diff: (id: string) => request<{ files: FileDiff[] }>(`/session/${id}/diff`),
+
+    /**
+     * The replayable log plus its computed keyframes.
+     *
+     * Keyframes come from the server rather than being derived here: two
+     * clients deciding independently what "mattered" in a run is two chances
+     * to decide differently.
+     */
+    timeline: (id: string, fromSeq = 0) =>
+      request<Timeline>(`/session/${id}/timeline?from_seq=${fromSeq}`),
 
     setTrust: (id: string, actionType: string, autoApprove: boolean) =>
       request<{ tiers: Record<string, TrustTier> }>(`/session/${id}/trust`, {

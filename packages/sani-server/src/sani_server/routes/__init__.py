@@ -7,6 +7,7 @@ from . import (
     sessions,
     stream,
     terminal,
+    timeline,
     trust,
     workspace,
 )
@@ -22,6 +23,7 @@ ROUTERS = [
     workspace.router,
     terminal.router,
     rag.router,
+    timeline.router,
 ]
 
 __all__ = ["ROUTERS"]

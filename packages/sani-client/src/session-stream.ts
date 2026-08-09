@@ -66,7 +66,17 @@ export class SessionStream {
   }
 
   connect(): void {
-    if (this.disposed || this.state.ended) return;
+    // A finished session has nothing further to send; reconnecting would only
+    // re-download a log the reducer has already folded.
+    if (this.state.ended) return;
+
+    // `connect()` is an explicit request to be connected, so it clears a prior
+    // dispose rather than being ignored by one. This matters because React runs
+    // effects mount -> cleanup -> mount in development: the adapter memoises the
+    // stream per session id, so the same object is disposed and then reconnected.
+    // Treating dispose as permanent made that second connect a silent no-op and
+    // left the session view blank -- in dev only, which is where it hides longest.
+    this.disposed = false;
 
     // Reconnect from the last sequence seen, so the server replays exactly what
     // was missed. reduceEvent drops any overlap, so this is safe to repeat.
