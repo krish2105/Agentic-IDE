@@ -89,6 +89,31 @@ export interface ProvenanceRange {
   confidence: number;
 }
 
+/** One agent in a race, and how far it has got. */
+export interface Racer {
+  session_id: string;
+  label: string;
+  branch: string;
+  worktree: string;
+  status: SessionStatus | "unknown";
+  current_step: number | null;
+  total_steps: number;
+  elapsed_s: number;
+  approval_needed: boolean;
+  files_changed: number;
+  cost: CostUsage | null;
+}
+
+export interface RaceBoard {
+  race_id: string;
+  task: string;
+  source_workspace: string;
+  created_at: number;
+  racers: Racer[];
+  running: number;
+  awaiting_approval: number;
+}
+
 export type CritiqueVerdict = "looks-right" | "concerns" | "likely-wrong";
 
 /**

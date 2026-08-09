@@ -112,23 +112,44 @@ def test_an_unknown_race_is_404(client):
     assert client.get("/race/race_nope").status_code == 404
 
 
-def test_discarding_records_the_kept_racer_without_merging_it(client, git_workspace):
-    """Merging a winner back is a history-touching operation with real blast
-    radius. It belongs behind the approval gate, not as a side effect of
-    closing a dialog."""
+def test_keeping_a_racer_discards_the_others_worktrees(client, git_workspace):
+    """Otherwise a user's repository accumulates sani/race-* refs forever."""
+    body = client.post(
+        "/race", json={"task": "t", "workspace": str(git_workspace), "count": 3}
+    ).json()
+    keep = body["racers"][0]["label"]
+    losers = [r["branch"] for r in body["racers"][1:]]
+
+    result = client.post(f"/race/{body['race_id']}/discard", json={"keep": keep}).json()
+    assert result["kept"] == keep
+
+    branches = subprocess.run(
+        ["git", "branch", "--list"], cwd=git_workspace, capture_output=True, text=True
+    ).stdout
+    for branch in losers:
+        assert branch not in branches, f"{branch} should have been removed"
+    assert result["kept_branch"] in branches
+
+
+def test_the_winners_worktree_survives_because_the_work_lives_there(
+    client, git_workspace
+):
+    """The agent edits the working directory and does not commit, so the work
+    is uncommitted in the worktree -- the branch tip does not contain it.
+    Removing the winner's worktree would delete the very thing that was kept,
+    and telling the user to "merge the branch" would send them to an empty ref.
+    """
     body = client.post(
         "/race", json={"task": "t", "workspace": str(git_workspace), "count": 2}
     ).json()
     keep = body["racers"][0]["label"]
 
     result = client.post(f"/race/{body['race_id']}/discard", json={"keep": keep}).json()
-    assert result["kept"] == keep
-    assert result["kept_branch"].startswith("sani/race-")
-    # The branch still exists in the source repo for the human to merge.
-    branches = subprocess.run(
-        ["git", "branch", "--list"], cwd=git_workspace, capture_output=True, text=True
-    ).stdout
-    assert result["kept_branch"] in branches
+
+    from pathlib import Path
+
+    assert Path(result["kept_worktree"]).exists(), "the kept work must not be deleted"
+    assert result["work_is_uncommitted"] is True
 
 
 def test_discarding_with_no_winner_cleans_up_entirely(client, git_workspace):

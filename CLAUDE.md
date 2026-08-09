@@ -403,9 +403,16 @@ makes this product trustworthy; there is a test asserting the always-confirm
 tier is intact inside a racer.
 
 **Winner selection is deliberately not automated.** Choosing the best solution
-is the judgement the human is here for. `discard` *records* which racer you kept
-and leaves its branch in the source repo; merging it back is a history-touching
-operation that belongs behind the gate, not a side effect of closing a dialog.
+is the judgement the human is here for. Merging is not done for you either —
+that is history-touching and belongs behind the gate, not a side effect of
+closing a dialog.
+
+⚠️ **The agent does not commit, so a racer's work is uncommitted in its
+worktree — the branch tip does not contain it.** Keeping a racer therefore
+removes the *losers'* worktrees and branches but leaves the winner's worktree in
+place: deleting it would delete the very thing that was kept, and telling
+someone to "merge the branch" would send them to an empty ref. The UI says
+`uncommitted` and names the worktree path for this reason.
 
 Capped at 6 racers: reviewing eight divergent solutions costs more human
 attention than the parallelism saves.

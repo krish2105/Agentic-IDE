@@ -32,11 +32,20 @@ const MissionControl3D = dynamic(() => import("@/components/three/MissionControl
   ssr: false,
 });
 
-function NewSessionForm({ onCreated }: { onCreated: (id: string) => void }) {
+function NewSessionForm({
+  onCreated,
+  onRaceStarted,
+}: {
+  onCreated: (id: string) => void;
+  onRaceStarted: (raceId: string) => void;
+}) {
   const [task, setTask] = useState("");
   const [workspace, setWorkspace] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 1 means a normal session. Racing is a way of starting a task, not a
+  // separate product, so it lives here rather than behind its own screen.
+  const [racers, setRacers] = useState(1);
   const variants = useGatedMotion(rise);
 
   const submit = async (event: React.FormEvent) => {
@@ -45,6 +54,22 @@ function NewSessionForm({ onCreated }: { onCreated: (id: string) => void }) {
     setBusy(true);
     setError(null);
     try {
+      if (racers > 1) {
+        if (!workspace.trim()) {
+          throw new ApiError(
+            400,
+            "race_unavailable",
+            "A race needs a workspace path — it must be a git repository so each agent gets its own worktree.",
+          );
+        }
+        const board = await api.startRace({
+          task: task.trim(),
+          workspace: workspace.trim(),
+          count: racers,
+        });
+        onRaceStarted(board.race_id);
+        return;
+      }
       const session = await api.createSession({
         task: task.trim(),
         workspace: workspace.trim() || undefined,
@@ -87,8 +112,34 @@ function NewSessionForm({ onCreated }: { onCreated: (id: string) => void }) {
           data-testid="create-session"
           className="rounded-xl px-7"
         >
-          {busy ? "Starting…" : "Start"}
+          {busy ? "Starting…" : racers > 1 ? `Race ${racers}` : "Start"}
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pt-2.5">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+          Agents
+        </span>
+        {[1, 2, 3, 4].map((count) => (
+          <button
+            key={count}
+            type="button"
+            onClick={() => setRacers(count)}
+            aria-pressed={racers === count}
+            className={`rounded-md px-2 py-0.5 font-mono text-[11px] transition-colors ${
+              racers === count
+                ? "bg-raised text-ink"
+                : "text-ink-faint hover:text-ink-dim"
+            }`}
+          >
+            {count}
+          </button>
+        ))}
+        {racers > 1 && (
+          <span className="text-[10px] text-ink-faint">
+            {racers} agents race in isolated git worktrees — the workspace must be a repo.
+          </span>
+        )}
       </div>
       <AnimatePresence>
         {error && (
@@ -291,7 +342,10 @@ export default function MissionControl() {
         />
 
         <div className="mb-12">
-          <NewSessionForm onCreated={openSession} />
+          <NewSessionForm
+            onCreated={openSession}
+            onRaceStarted={(raceId) => router.push(`/race/${raceId}`)}
+          />
         </div>
 
         <div className="mb-4 flex flex-wrap items-baseline gap-x-4 gap-y-2">

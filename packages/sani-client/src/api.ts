@@ -4,6 +4,7 @@ import type {
   FileEntry,
   MissionControlRow,
   ProvenanceRange,
+  RaceBoard,
   RagStatus,
   Session,
   TrustTier,
@@ -120,6 +121,39 @@ export function createApi(baseUrl: string, options: ApiOptions = {}) {
     kill: (id: string) => request<Session>(`/session/${id}/kill`, { method: "POST" }),
 
     diff: (id: string) => request<{ files: FileDiff[] }>(`/session/${id}/diff`),
+
+    /**
+     * Start N agents on one task, each in its own git worktree.
+     *
+     * Requires the workspace to be a git repository; the server refuses
+     * plainly otherwise rather than pretending the racers are isolated.
+     */
+    startRace: (input: {
+      task: string;
+      workspace: string;
+      count: number;
+      model_backend?: string | null;
+    }) => request<RaceBoard>("/race", { method: "POST", body: JSON.stringify(input) }),
+
+    races: () => request<{ races: RaceBoard[] }>("/race"),
+
+    race: (raceId: string) => request<RaceBoard>(`/race/${raceId}`),
+
+    /** End a race. `keep` records the racer you chose; it does not merge -- that
+     *  is a history-touching operation and belongs behind the approval gate. */
+    discardRace: (raceId: string, keep?: string | null) =>
+      request<{
+        race_id: string;
+        kept: string | null;
+        kept_worktree: string | null;
+        kept_branch: string | null;
+        /** The agent does not commit, so the kept work is uncommitted in the
+         *  worktree -- the branch tip does not contain it. */
+        work_is_uncommitted?: boolean;
+      }>(`/race/${raceId}/discard`, {
+        method: "POST",
+        body: JSON.stringify({ keep: keep ?? null }),
+      }),
 
     /** Line-level attribution for a session's workspace. */
     provenance: (sessionId: string) =>

@@ -98,6 +98,18 @@ class WorktreePool:
         self._worktrees.append(worktree)
         return worktree
 
+    async def remove(self, worktree: Worktree) -> None:
+        """Drop one worktree and its branch. Best-effort, like cleanup()."""
+        try:
+            await _git("worktree", "remove", "--force", str(worktree.path), cwd=self.source)
+        except Exception:
+            pass
+        try:
+            await _git("branch", "-D", worktree.branch, cwd=self.source)
+        except Exception:
+            pass
+        self._worktrees = [w for w in self._worktrees if w.path != worktree.path]
+
     async def cleanup(self) -> None:
         """Remove every worktree and branch this pool created.
 

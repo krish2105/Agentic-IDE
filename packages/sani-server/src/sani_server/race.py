@@ -180,10 +180,15 @@ class RaceCoordinator:
     async def discard(self, race_id: str, keep: str | None = None) -> dict[str, Any]:
         """End a race, optionally naming the racer whose work you kept.
 
-        `keep` is recorded, not acted on: merging a winner back is a git
-        operation with real blast radius, and it belongs behind the same
-        approval gate as any other history-touching action rather than
-        happening as a side effect of closing a dialog.
+        The losers are killed and their worktrees removed. The winner's worktree
+        is deliberately **left in place**, because that is where its work
+        actually is: the agent edits files in the working directory and does not
+        commit them, so the branch tip does not contain the change. Removing the
+        winner's worktree would delete the very thing the user chose to keep.
+
+        Merging is still not done for you -- that is a history-touching
+        operation and belongs behind the approval gate rather than happening as
+        a side effect of closing a dialog.
         """
         race = self.get(race_id)
         kept = next((r for r in race.racers if r.label == keep or r.session_id == keep), None)
@@ -195,18 +200,30 @@ class RaceCoordinator:
                 await self.manager.kill(racer.session_id)
             except Exception:
                 pass
+            # Drop the loser's worktree and branch: leaving them behind means a
+            # user's repository accumulates sani/race-* refs forever.
+            if race.pool is not None:
+                worktree = next(
+                    (w for w in race.pool.worktrees if str(w.path) == racer.worktree), None
+                )
+                if worktree is not None:
+                    await race.pool.remove(worktree)
 
         result = {
             "race_id": race_id,
             "kept": kept.label if kept else None,
             "kept_worktree": kept.worktree if kept else None,
             "kept_branch": kept.branch if kept else None,
+            # The honest bit: the work is uncommitted in the worktree, not on
+            # the branch. Telling the user to "merge the branch" would send them
+            # to an empty ref.
+            "work_is_uncommitted": kept is not None,
         }
 
         if kept is None and race.pool is not None:
             await race.pool.cleanup()
-            self._races.pop(race_id, None)
 
+        self._races.pop(race_id, None)
         return result
 
     async def shutdown(self) -> None:
