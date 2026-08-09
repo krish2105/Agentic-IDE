@@ -110,3 +110,17 @@ test("a correct pair warns about nothing", () => {
   // An empty token is the normal local case, not a mistake.
   assert.equal(credentialWarning({ server: "http://127.0.0.1:8060", token: "" }), null);
 });
+
+test("a shell command pasted into the token field is called out", () => {
+  // The clipboard had the command you were told to run, not the token. Not a
+  // URL and not a provider key, so whitespace is the only tell.
+  const warning = credentialWarning({
+    server: "https://x.trycloudflare.com",
+    token: "cd ~/Projects/thing && EXTRA_ORIGINS=https://y.vercel.app ./scripts/serve.sh",
+  });
+  assert.match(warning!, /contains spaces or line breaks/);
+});
+
+test("a token with a stray newline is called out rather than silently failing", () => {
+  assert.match(credentialWarning({ server: "https://x.y", token: "abc\ndef" })!, /line breaks/);
+});

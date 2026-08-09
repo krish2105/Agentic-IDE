@@ -99,6 +99,13 @@ export function credentialWarning(input: { server: string; token: string }): str
   if (token && /^[a-z][a-z0-9+.-]*:\/\//i.test(token)) {
     return "That looks like a URL, not a token — it belongs in the Server URL field above.";
   }
+  // Whitespace is the tell for "the clipboard had something else". Bearer tokens
+  // never contain it, and the something else is usually a shell command copied
+  // out of a terminal or a chat a moment earlier -- which is not a URL and not a
+  // provider key, so nothing else here would catch it.
+  if (/\s/.test(token)) {
+    return "That contains spaces or line breaks, so it is not a token — it looks like a copied command or a wrapped line. Check what was on your clipboard.";
+  }
   // A Groq/OpenAI-style key is for the *server* to hold when it calls the model;
   // sending it here would hand your model credentials to the wrong party.
   if (/^(gsk_|sk-)/.test(token)) {
