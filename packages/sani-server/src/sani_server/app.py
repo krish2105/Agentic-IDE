@@ -52,7 +52,13 @@ async def lifespan(app: FastAPI):
     # session parked on an approval nobody is going to give.
     for record in app.state.manager.list():
         if record.task and not record.task.done():
-            record.executor.kill()
+            # Only kill what is still running. A finished session's task is not
+            # reaped the instant its executor stops emitting, so killing on
+            # `not done()` alone overwrote a completed run's status with
+            # `killed` -- and that was the last durable snapshot, so the session
+            # came back from the archive as killed rather than complete.
+            if not record.session.is_terminal:
+                record.executor.kill()
             record.task.cancel()
             await asyncio.gather(record.task, return_exceptions=True)
         await record.sandbox.shutdown()

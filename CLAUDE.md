@@ -27,7 +27,8 @@ packages/sani-client/   shared TypeScript client — wire types, reducer, API
 packages/sani-core/rag/ chunking, embeddings, vector store, retrieval
 tests/core|server/      Python unit and API tests
 scripts/serve.sh        start the server with token, CORS and backend set
-scripts/tunnel.sh       expose it over HTTPS; prints and copies the URL
+scripts/tunnel.sh       expose it over HTTPS; prints the URL
+scripts/install-service.sh  launchd job so the server survives a closed terminal
 scripts/ws_client.py    manual stream viewer against a live server
 apps/web/               Next.js web IDE (Phase 1)
 apps/web/e2e/           Playwright tests — real browser against real servers
@@ -232,6 +233,25 @@ single ordered writer per session (concurrent writes to one list arrive out of
 order, and a replayed log with holes is worse than a slow one). Both the log
 flush and the snapshot are awaited on the terminal event, because another
 process may read the session the instant it sees `session.complete`.
+
+⚠️ **That guarantee is about ordering, and it was wrong in three places until a
+real Redis exposed it.** Installing `redis-server` un-skipped these tests and one
+failed deterministically: a *completed* session came back from the archive as
+`failed`. Three separate causes, each individually enough to break it:
+
+1. `hub.publish` delivered to subscribers *before* flushing, so a client acting
+   on `session.complete` could outrun the archive it was promised.
+2. `manager.emit` snapshotted *after* publish, for the same reason.
+3. `_persist` is fire-and-forget and therefore unordered, so a snapshot queued
+   two events earlier could land *after* the awaited terminal one and put the
+   session back to `executing`. `_persist_now` now drains pending writes first.
+
+Plus a fourth, in shutdown: a finished session's task is not reaped the instant
+its executor stops emitting, so killing on `not task.done()` alone stamped
+`killed` over a completed run — and that was the last durable snapshot.
+
+The lesson worth keeping: "awaited" is not the same as "ordered", and a memory
+archive cannot tell you the difference.
 
 ## Codebase RAG (Phase 3)
 

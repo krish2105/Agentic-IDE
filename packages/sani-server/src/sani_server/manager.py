@@ -99,9 +99,22 @@ class SessionManager:
         flushed there: another process may read this session the instant it
         sees session.complete, and a stale snapshot at that moment is
         indistinguishable from a session that never finished.
+
+        Queued snapshots are drained first. `_persist` is fire-and-forget and so
+        unordered, which meant a snapshot queued two events ago could land
+        *after* this awaited write and put the session back to `executing` --
+        exactly the stale state this method exists to prevent. The event log
+        already solved the same hazard with a single ordered writer; snapshots
+        never got that treatment, and only a durable store made it visible.
         """
-        if self.archive.enabled:
-            await self.archive.snapshot(session.id, session.to_dict())
+        if not self.archive.enabled:
+            return
+
+        pending = [task for task in self._writes if not task.done()]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        await self.archive.snapshot(session.id, session.to_dict())
 
     async def restore(self) -> int:
         """Rehydrate archived sessions at startup (Phase 3b).
@@ -205,13 +218,21 @@ class SessionManager:
         # it, so it is a dependency of the tools rather than a side channel.
         sandbox = build_sandbox(ws, session.id)
         async def emit(event):
-            payload = await hub.publish(event)
             # Snapshot on every status transition: the archive is what a
             # restarted process and a second server instance read, and a stale
             # snapshot there is indistinguishable from a stuck session.
+            #
+            # On a terminal event the snapshot is written *before* publish, not
+            # after. `_finish` sets the status before emitting, so the state is
+            # already correct here -- and publishing first let a client see
+            # session.complete while the snapshot still said `executing`, which
+            # a second server then read as an interrupted run and marked failed.
             if event.is_terminal:
                 await self._persist_now(session)
-            elif event.type in SNAPSHOT_ON:
+                return await hub.publish(event)
+
+            payload = await hub.publish(event)
+            if event.type in SNAPSHOT_ON:
                 self._persist(session)
             return payload
 

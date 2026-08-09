@@ -54,7 +54,6 @@ class SessionHub:
         self._seq += 1
         event.seq = self._seq
         payload = event.to_dict()
-        self._deliver(payload)
 
         if self.archive.enabled:
             # Queued rather than awaited: a slow Redis must not be what delays a
@@ -65,11 +64,17 @@ class SessionHub:
             self._archive_queue.put_nowait(payload)  # type: ignore[union-attr]
 
         if event.is_terminal:
-            # The one place the write *is* awaited. Once a client has seen
-            # session.complete, the archive must already be complete -- another
-            # process may read it the moment this returns.
+            # Flush *before* delivering, not after. The guarantee this is meant
+            # to provide is that a client which acts the instant it sees
+            # session.complete cannot outrun the archive -- and delivering first
+            # gave it exactly that race. A second server instance would read a
+            # snapshot still saying `executing`, conclude the session was
+            # interrupted, and mark a finished run `failed`.
             await self.flush()
+            self._deliver(payload)
             self.close()
+        else:
+            self._deliver(payload)
         return payload
 
     def _ensure_writer(self) -> None:
