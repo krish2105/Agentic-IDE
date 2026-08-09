@@ -55,10 +55,10 @@ because `packages/` also holds a TypeScript package.
 uv sync                                          # install the Python workspace
 npm install                                      # install all TS workspaces (root)
 
-uv run pytest                                    # 354 tests, ~30s
+uv run pytest                                    # 361 tests, ~34s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
 npm run test:client                              # 45 shared-client tests (needs Node 22.6+)
-npm run test:e2e                                 # Playwright, needs both servers up
+npm run test:e2e                                 # 31 Playwright tests; both servers up
 npm run typecheck                                # all three TS workspaces
 
 uv run uvicorn sani_server.app:app --port 8000   # the server
@@ -531,9 +531,19 @@ a reproducible claim rather than a quota-dependent one.
 
 ## Testing
 
-129 tests, ~2 seconds, no network and no ports. Server tests use
+361 Python tests, ~34 seconds, no network and no ports. Server tests use
 `fastapi.testclient.TestClient` for real WebSocket frames against the real ASGI
-app.
+app. Plus 45 shared-client tests and 31 Playwright tests.
+
+**`npm run test:client` needs Node 22+** — it runs `node --test
+--experimental-strip-types`. On Node 20 it fails with `bad option`, which looks
+like a broken script and is not one.
+
+**`ModuleNotFoundError: No module named 'sani_server'` means the editable
+install desynced**, not that anything is wrong with the code. The `.pth` files
+in `.venv` look correct when this happens, which sends you down a rabbit hole.
+`rm -rf .venv && uv sync --extra litellm` is the fix; a targeted
+`--reinstall-package` is not enough.
 
 **The `client` fixture must stay a context manager.** `with TestClient(app)`
 starts one blocking portal that persists across requests. Without it every
@@ -563,10 +573,42 @@ reason; keep it that way.
 ### End-to-end (browser)
 
 `apps/web/e2e/` drives a real Chromium against a real Next.js build and a real
-server. Both servers must already be running — see `apps/web/e2e/README.md` for
-the gotchas, of which the two that cost the most time are: `NEXT_PUBLIC_*` is
-inlined at **build** time, and rebuilding under a running `next start` corrupts
-`.next` and produces 500s that look exactly like application bugs.
+server: `ide.spec.ts` (plan → gate → approve), `redesign.spec.ts` (risk,
+replay, cognition graph, themes, race) and `a11y.spec.ts` (axe on every theme,
+keyboard, reduced motion, 375px). Both servers must already be running.
+
+**Every environment mistake here fails identically** — a 60-second selector
+timeout naming a component that was never at fault. `e2e/preflight.ts` runs
+first and turns the two common ones into a one-second error that states the
+fix:
+
+- **CORS silently breaks only half the app.** The server allows `:3000` by
+  default; the WebSocket is *not* CORS-checked, so with the wrong origin the
+  stream connects and the plan renders while every `fetch` is blocked. The file
+  tree, trust panel and diffs come up empty and look like three broken
+  components. Pass `SANI_CORS_ORIGINS=<web origin>`.
+- **`allowedDevOrigins` in `next.config.mjs`.** Next 16 serves
+  `/_next/static/*` in dev only to hosts it recognises, and `127.0.0.1` is not
+  `localhost` to that check. A blocked host 403s every chunk, so the page
+  server-renders and never hydrates — correct-looking DOM, nothing works.
+
+See `apps/web/e2e/README.md` for the rest, of which the two that cost the most
+time are: `NEXT_PUBLIC_*` is inlined at **build** time, and rebuilding under a
+running `next start` corrupts `.next` and produces 500s that look exactly like
+application bugs. Run `a11y.spec.ts` against a production build — dev-mode
+double-rendering makes the focus and axe assertions flap.
+
+**Axe scans must wait for finite animations to settle.** An element caught
+mid-fade fails contrast on colours that are fine once it lands, so an unsettled
+scan reports the animation rather than the palette. Infinite animations (the
+amber approval pulse, the ambient field) are excluded from the wait or it never
+returns.
+
+**Contrast is measured against `.glass-elevated`, not against a token.** That
+panel is `--t-raised` at 72% with `saturate(1.4)`, so it composites lighter
+than any solid surface — ink tuned against `--t-raised` still failed on the
+approval card, which is the one thing a person must be able to read. `a11y.spec.ts`
+checks all six themes on both the landing page and a blocked session.
 
 ---
 
