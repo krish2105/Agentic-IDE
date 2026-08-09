@@ -27,7 +27,8 @@ packages/sani-client/   shared TypeScript client — wire types, reducer, API
 packages/sani-core/rag/ chunking, embeddings, vector store, retrieval
 tests/core|server/      Python unit and API tests
 scripts/serve.sh        start the server with token, CORS and backend set
-scripts/tunnel.sh       expose it over HTTPS; prints the URL
+scripts/tunnel.sh       expose it over HTTPS; prints the URL (random hostname)
+scripts/named-tunnel.sh a hostname that survives restarts; needs a Cloudflare zone
 scripts/install-service.sh  launchd job so the server survives a closed terminal
 scripts/ws_client.py    manual stream viewer against a live server
 apps/web/               Next.js web IDE (Phase 1)
