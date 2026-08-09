@@ -228,7 +228,7 @@ Every setting, with its default.
 | `SANI_MODEL` | `groq/llama-3.3-70b-versatile` | LiteLLM planner model |
 | `SANI_SESSION_STORE` | `memory` | `memory` or `redis` |
 | `SANI_REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis connection |
-| `SANI_SANDBOX` | `local` | `local` or `docker` |
+| `SANI_SANDBOX` | `local` | `local`, `docker`, or `sandbox-exec` (macOS only) |
 | `SANI_SANDBOX_IMAGE` | `python:3.11-slim` | Container image |
 | `SANI_TERMINAL_SHELL` | `/bin/bash` | Shell for the PTY |
 | `SANI_WORKSPACE_ROOT` | unset | Confines every workspace beneath this path |

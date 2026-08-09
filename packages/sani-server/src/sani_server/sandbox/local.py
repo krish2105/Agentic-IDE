@@ -19,7 +19,9 @@ from .pty_process import PtyTerminal, spawn_pty
 SHELL_ENV_VAR = "SANI_TERMINAL_SHELL"
 
 
-def _pick_shell() -> str:
+def pick_shell() -> str:
+    """Which interactive shell to launch. Shared with the sandbox-exec sandbox,
+    which runs the same shell under a Seatbelt profile rather than a container."""
     configured = os.environ.get(SHELL_ENV_VAR)
     if configured:
         return configured
@@ -57,7 +59,7 @@ class LocalSandbox(Sandbox):
         return await self._runner.run(command, cwd=self.workspace, timeout_s=timeout_s)
 
     async def open_terminal(self, *, cols: int = 80, rows: int = 24) -> PtyTerminal:
-        shell = _pick_shell()
+        shell = pick_shell()
         argv = [shell, "-i"] if shell.endswith("bash") else [shell]
         return await spawn_pty(
             argv,
@@ -68,4 +70,4 @@ class LocalSandbox(Sandbox):
         )
 
     def describe(self) -> dict:
-        return {**super().describe(), "shell": _pick_shell(), "isolated": False}
+        return {**super().describe(), "shell": pick_shell(), "isolated": False}

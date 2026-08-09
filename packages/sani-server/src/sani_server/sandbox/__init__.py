@@ -1,7 +1,9 @@
 """Sandbox selection.
 
-``SANI_SANDBOX=local`` (default) or ``docker``. The Docker path is unverified;
-see the module docstring in ``docker.py``.
+``SANI_SANDBOX=local`` (default), ``docker``, or ``sandbox-exec``. The Docker
+path is unverified; see the module docstring in ``docker.py``. ``sandbox-exec``
+is macOS-only and needs no daemon; see the module docstring in
+``sandbox_exec.py``.
 """
 
 from __future__ import annotations
@@ -24,7 +26,13 @@ def build_sandbox(workspace: Path, session_id: str, kind: str | None = None) -> 
         from .docker import DockerSandbox
 
         return DockerSandbox(workspace, session_id)
-    raise SandboxError(f"unknown sandbox {resolved!r} (expected 'local' or 'docker')")
+    if resolved == "sandbox-exec":
+        from .sandbox_exec import SandboxExecSandbox
+
+        return SandboxExecSandbox(workspace, session_id)
+    raise SandboxError(
+        f"unknown sandbox {resolved!r} (expected 'local', 'docker', or 'sandbox-exec')"
+    )
 
 
 __all__ = [

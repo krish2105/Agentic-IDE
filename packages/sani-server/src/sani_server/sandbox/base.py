@@ -4,8 +4,9 @@ Spec Section 11 calls Docker-per-session "demo-grade, not production-hardened",
 and that is the honest framing: a resource-capped container is a blast-radius
 reduction, not a multi-tenant security boundary.
 
-Two implementations ship: a local PTY in the session workspace, and a Docker
-container per session. Same three methods, chosen by ``SANI_SANDBOX``.
+Three implementations ship: a local PTY in the session workspace, a Docker
+container per session, and a macOS Seatbelt (``sandbox-exec``) profile that
+needs no daemon. Same three methods, chosen by ``SANI_SANDBOX``.
 """
 
 from __future__ import annotations

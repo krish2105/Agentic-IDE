@@ -156,7 +156,8 @@ server user can. The agent's commands are the ones that get judged.
 
 ## Sandbox
 
-`SANI_SANDBOX=local` (default) or `docker`; `SANI_SANDBOX_IMAGE` sets the image.
+`SANI_SANDBOX=local` (default), `docker`, or `sandbox-exec`; `SANI_SANDBOX_IMAGE`
+sets the Docker image.
 
 - **`LocalSandbox`** runs a PTY as the server user in the session workspace. It
   provides **no isolation** and says so in its own `describe()`. Correct for
@@ -166,10 +167,21 @@ server user can. The agent's commands are the ones that get judged.
   Docker client but no daemon, and reports `verified: false`. Verify it before
   relying on it: start a daemon, `SANI_SANDBOX=docker`, open a session, and
   confirm the terminal attaches and `docker ps` shows `sani-<session_id>`.
+- **`SandboxExecSandbox`** runs commands under a macOS Seatbelt profile via
+  `sandbox-exec` — no daemon, no image, no per-session process. It denies all
+  filesystem writes and all network access by default, then re-opens writes to
+  exactly the session workspace and a per-sandbox scratch directory (exported
+  as `TMPDIR`, so ordinary tools have somewhere to put temp files). **Verified
+  in this environment** — `tests/server/test_sandbox_exec.py` runs its live
+  tests for real whenever the suite executes on Darwin with `sandbox-exec`
+  present, and skips them otherwise (same pattern `test_redis_sessions.py`
+  uses for `redis-server`). Darwin only, and unlike Docker it has **no
+  memory/CPU/process-count ceiling** — Seatbelt confines *where* a command can
+  read, write, and connect, not how much of the machine it can consume.
 
 **Both the agent and the human go through the sandbox.** The agent's shell tool
-executes via `SandboxCommandRunner`, so `SANI_SANDBOX=docker` moves the agent
-too, not just the terminal.
+executes via `SandboxCommandRunner`, so switching `SANI_SANDBOX` moves the
+agent too, not just the terminal.
 
 The seam is `sani_core.runners.CommandRunner`. The core cannot import the
 server, so it owns the interface and ships the honest default
