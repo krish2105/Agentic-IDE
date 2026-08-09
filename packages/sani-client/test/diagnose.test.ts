@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  credentialWarning,
   diagnoseConnection,
   explainProblem,
   isHostedPage,
@@ -74,4 +75,38 @@ test("a malformed server URL does not throw", () => {
     diagnoseConnection({ server: "not a url", pageUrl: VERCEL }),
     "unreachable",
   );
+});
+
+test("a URL pasted into the token field is called out", () => {
+  // The failure this prevents: endless 401s that look exactly like a stale
+  // token, so you keep re-fixing the server field and nothing changes.
+  assert.match(
+    credentialWarning({ server: "https://x.trycloudflare.com", token: "https://x.trycloudflare.com" })!,
+    /looks like a URL/,
+  );
+});
+
+test("a model provider key in the token field is called out", () => {
+  const warning = credentialWarning({ server: "https://x.trycloudflare.com", token: "gsk_abc123" });
+  assert.match(warning!, /model provider API key/);
+  assert.match(credentialWarning({ server: "https://x.y", token: "sk-abc123" })!, /model provider/);
+});
+
+test("a token pasted into the server field is called out", () => {
+  assert.match(
+    credentialWarning({ server: "IYXkVzvAhEiB9J3l9KjGVFciGjmGonxP990RIV7s", token: "" })!,
+    /looks like a token/,
+  );
+});
+
+test("a correct pair warns about nothing", () => {
+  assert.equal(
+    credentialWarning({
+      server: "https://exploring-writers.trycloudflare.com",
+      token: "IYXkVzvAhEiB9J3l9KjGVFciGjmGonxP990RIV7s",
+    }),
+    null,
+  );
+  // An empty token is the normal local case, not a mistake.
+  assert.equal(credentialWarning({ server: "http://127.0.0.1:8060", token: "" }), null);
 });

@@ -77,3 +77,35 @@ export function explainProblem(problem: ConnectionProblem, server: string): stri
       return `Cannot reach ${server}.`;
   }
 }
+
+/**
+ * Catch the two fields being filled with each other's value.
+ *
+ * The connection panel asks for a server URL and a bearer token one after the
+ * other, and both arrive via the clipboard, so crossing them is easy and the
+ * consequence is opaque: a URL in the token field produces an endless stream of
+ * 401s that look identical to a stale token, and no amount of correcting the
+ * *server* field fixes it. Worth naming at the point of entry rather than
+ * leaving someone to infer it from a log.
+ *
+ * Deliberately advisory. It returns a warning, never blocks a save — a token
+ * format is the server operator's business, and refusing an unusual one would be
+ * a worse failure than a hint.
+ */
+export function credentialWarning(input: { server: string; token: string }): string | null {
+  const token = input.token.trim();
+  const server = input.server.trim();
+
+  if (token && /^[a-z][a-z0-9+.-]*:\/\//i.test(token)) {
+    return "That looks like a URL, not a token — it belongs in the Server URL field above.";
+  }
+  // A Groq/OpenAI-style key is for the *server* to hold when it calls the model;
+  // sending it here would hand your model credentials to the wrong party.
+  if (/^(gsk_|sk-)/.test(token)) {
+    return "That looks like a model provider API key. It belongs in the server's environment, not in this browser — the auth token is the one the server prints on startup.";
+  }
+  if (server && !/[./:]/.test(server) && server.length > 24) {
+    return "The Server URL looks like a token. It should be a host, e.g. https://something.trycloudflare.com.";
+  }
+  return null;
+}

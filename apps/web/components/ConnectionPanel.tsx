@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { credentialWarning } from "@sani/client";
 import { BUILD_TIME_SERVER, currentConnection, diagnose, saveConnection } from "@/lib/client";
 
 /**
@@ -33,6 +34,7 @@ export function ConnectionPanel({
   if (!open) return null;
 
   const problem = diagnose(server);
+  const mixUp = credentialWarning({ server, token });
   const loopback = problem === "loopback-from-hosted";
   const mixed = problem === "insecure-mix";
 
@@ -77,6 +79,19 @@ export function ConnectionPanel({
         data-testid="connection-token"
         className="w-full rounded border border-edge bg-base px-3 py-2 font-mono text-xs text-ink outline-none focus:border-edge-strong"
       />
+
+      {/* The two fields are filled from the clipboard one after the other, so
+          crossing them is easy — and a URL in the token field yields 401s that
+          are indistinguishable from a stale token, which sends you back to fix
+          the *server* field over and over. Named here, at the point of entry. */}
+      {mixUp && (
+        <p
+          className="mt-3 text-[11px] leading-relaxed text-attention"
+          data-testid="connection-mixup"
+        >
+          {mixUp}
+        </p>
+      )}
 
       {loopback && (
         <p className="mt-3 text-[11px] leading-relaxed text-attention">
