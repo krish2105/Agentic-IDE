@@ -53,19 +53,34 @@ if [ -z "$URL" ]; then
   exit 1
 fi
 
-command -v pbcopy >/dev/null 2>&1 && printf %s "$URL" | pbcopy && COPIED="  (copied to clipboard)" || COPIED=""
+# Deliberately does NOT touch the clipboard.
+#
+# The web IDE needs two values pasted seconds apart — this URL and the auth
+# token — and only one clipboard exists. Copying the URL here means the next ⌘V
+# puts a URL in the token field, which produces 401s indistinguishable from a
+# stale token and costs an hour. The URL is human-readable and can be copied off
+# the screen; the token is opaque and cannot. So the clipboard is reserved for
+# the token, and the token copy is the last thing you do.
+TOKEN_FILE="${SANI_DIR:-$HOME/.sani}/auth-token"
 
 cat <<BANNER
 
   ┌─────────────────────────────────────────────────────────────────────┐
-     $URL$COPIED
+     $URL
   └─────────────────────────────────────────────────────────────────────┘
 
-  Paste that into the web IDE: click the server URL in the header, or
-  "Change connection" on the error banner. The token is the file
-  ~/.sani/auth-token — copy it with:
+  In the web IDE, "Change connection":
 
-      tr -d '\\n' < ~/.sani/auth-token | pbcopy
+    1. SERVER URL  — the address above (select it here and copy)
+    2. AUTH TOKEN  — run this, THEN paste, so the clipboard holds the token
+                     and not the URL:
+
+           tr -d '\\n' < $TOKEN_FILE | pbcopy
+
+    3. Save and reconnect
+
+  The clipboard is left alone on purpose: two values, one clipboard, and a
+  URL in the token field is the single most confusing failure here.
 
   This hostname dies when this process does. Leave it running.
 
