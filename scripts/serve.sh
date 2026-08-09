@@ -170,6 +170,28 @@ else
                umask 077; printf %s 'gsk_...' > $GROQ_FILE"
 fi
 
+# --- session store ----------------------------------------------------------
+# Inferred from whether Redis actually answers, the same way the backend is
+# inferred from the key file. With the memory store a restart silently discards
+# every session, including one parked on an approval nobody has answered yet --
+# and "Mission Control is empty again" gives no hint that a store was the reason.
+#
+# An explicit SANI_SESSION_STORE wins, so `SANI_SESSION_STORE=memory` is still
+# available for a throwaway run.
+REDIS_URL="${SANI_REDIS_URL:-redis://127.0.0.1:6379/0}"
+if [ -n "${SANI_SESSION_STORE:-}" ]; then
+  STORE_NOTE="$SANI_SESSION_STORE (set explicitly)"
+elif command -v redis-cli >/dev/null 2>&1 && \
+     [ "$(redis-cli -u "$REDIS_URL" ping 2>/dev/null)" = "PONG" ]; then
+  export SANI_SESSION_STORE=redis
+  export SANI_REDIS_URL="$REDIS_URL"
+  STORE_NOTE="redis — sessions survive a restart ($REDIS_URL)"
+else
+  export SANI_SESSION_STORE=memory
+  STORE_NOTE="memory — sessions are LOST on restart. Start redis for durable history:
+               brew services start redis"
+fi
+
 # --- CORS -------------------------------------------------------------------
 # 3000 through 3003, both spellings, because `next dev` silently takes the next
 # free port when 3000 is busy — and the resulting CORS block is invisible: the
@@ -193,6 +215,7 @@ cat <<BANNER
   port      : $PORT (loopback only — expose it with a tunnel, never --host 0.0.0.0)
   auth      : $AUTH_NOTE
   backend   : $BACKEND_NOTE
+  store     : $STORE_NOTE
   origins   : $SANI_CORS_ORIGINS
 
 BANNER

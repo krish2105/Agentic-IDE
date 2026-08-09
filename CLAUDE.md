@@ -216,6 +216,15 @@ Where a command will run is on `tool.proposed` as `preview.runs_in`, and on
 ## Session persistence (Phase 3b)
 
 `SANI_SESSION_STORE=memory` (default) or `redis`; `SANI_REDIS_URL` sets the URL.
+`scripts/serve.sh` picks `redis` automatically when one answers on
+`redis://127.0.0.1:6379/0`, and prints which store it chose -- with the memory
+store a restart silently discards every session, and "Mission Control is empty
+again" gives no hint that the store was the reason.
+
+**Homebrew's `redis.conf` ships four `loadmodule` lines** for RedisBloom,
+RediSearch, RedisJSON and RedisTimeSeries, with *relative* paths to files that
+are not installed -- and Redis aborts on a failed module load. `brew services`
+just reports `error 1`. Comment them out; none of them are used here.
 
 The split matters: the **store** keeps runtime handles (executor task, sandbox,
 PTY) and is always in memory, because those are process-local by nature. The
