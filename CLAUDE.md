@@ -27,6 +27,7 @@ packages/sani-client/   shared TypeScript client — wire types, reducer, API
 packages/sani-core/rag/ chunking, embeddings, vector store, retrieval
 tests/core|server/      Python unit and API tests
 scripts/serve.sh        start the server with token, CORS and backend set
+scripts/tunnel.sh       expose it over HTTPS; prints and copies the URL
 scripts/ws_client.py    manual stream viewer against a live server
 apps/web/               Next.js web IDE (Phase 1)
 apps/web/e2e/           Playwright tests — real browser against real servers
