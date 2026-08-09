@@ -213,7 +213,8 @@ Set `sani.serverUrl` if the backend is not on `127.0.0.1:8000`. The sidebar
 carries the same Chat/Plan/Diffs dock; diffs open in **VS Code's own diff
 editor** and agent-authored lines get gutter marks.
 
-⚠️ This extension has never run inside a real editor — see
+Verified inside a real editor — all 5 integration tests pass against a
+downloaded VS Code. Needs `@vscode/test-electron@^3.1.0` or newer; see
 `apps/vscode/TESTING.md`.
 
 ---
@@ -417,20 +418,22 @@ npm run test:e2e       # 5 browser tests — both servers must be up first
 npm run typecheck      # all three TypeScript workspaces
 ```
 
-**Two components are built but have never executed.** Each reports its own
+**One component is built but has never executed.** It reports its own
 unverified state rather than letting you assume otherwise:
 
 | Component | How to verify | Reports |
 |---|---|---|
-| VS Code extension | `npm run test:vscode --workspace sani-vscode` | see TESTING.md |
 | Docker sandbox | `SANI_SANDBOX=docker`, then `docker ps` for `sani-<id>` | `verified: false` |
 
-If you are demoing this, running those two is the highest-value hour you can
-spend — it converts "believed to work" into "known to work". The pgvector
-store used to be a third; it is now genuinely verified whenever a Postgres is
-reachable (`uv sync --extra pgvector`, then `uv run pytest tests/core/test_pgvector_store.py`),
-and on macOS the Docker sandbox now has a container-free alternative,
-`SANI_SANDBOX=sandbox-exec`, that is verified the same way.
+If you are demoing this, running that is the highest-value few minutes you can
+spend — it converts "believed to work" into "known to work". Two others used
+to be on this list: the pgvector store, now genuinely verified whenever a
+Postgres is reachable (`uv sync --extra pgvector`, then
+`uv run pytest tests/core/test_pgvector_store.py`); and the VS Code extension,
+now verified against a real downloaded VS Code (`npm run test:vscode
+--workspace sani-vscode`, needs `@vscode/test-electron@^3.1.0`+). On macOS the
+Docker sandbox also has a container-free alternative, `SANI_SANDBOX=sandbox-exec`,
+verified the same way.
 
 ---
 

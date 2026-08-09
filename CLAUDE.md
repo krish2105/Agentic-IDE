@@ -3,12 +3,14 @@
 A dual-client agentic IDE (VS Code extension + web IDE) over one Python backend.
 **Every phase in the roadmap is built:** the agent core, the FastAPI server,
 the web IDE, the VS Code extension, codebase RAG, Redis-backed session
-persistence, the browser subagent, and the trust/Mission Control UI. ⚠️ Two
-things are written but unverified — the VS Code extension in a real editor,
-and `DockerSandbox` against a daemon. Each says so in its own `describe()` or
-its TESTING doc. (A third, `PgVectorStore` against Postgres, was in this list
-until it was actually run against a live Postgres+pgvector and now has a real
-test to prove it: `tests/core/test_pgvector_store.py`.)
+persistence, the browser subagent, and the trust/Mission Control UI. ⚠️ One
+thing is written but unverified — `DockerSandbox` against a daemon. It says so
+in its own `describe()`. (Two others used to be on this list. `PgVectorStore`
+against Postgres was run against a live Postgres+pgvector and now has a real
+test to prove it: `tests/core/test_pgvector_store.py`. The VS Code extension
+was run inside a real VS Code and all 5 integration tests pass — see
+`apps/vscode/TESTING.md`, which also documents a real `@vscode/test-electron`
+version bug that surfaced only by actually running it.)
 
 Read this before changing the server. The API contract and the safety model
 below are consumed by both clients; changing either is a breaking change for
@@ -451,7 +453,11 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
   snapshots, so the original is derived rather than fetched.
 - **`activate` returns `{ controller, openDiff }`** so integration tests can
   drive the real extension instead of reaching into module internals.
-- ⚠️ **Never run inside a real editor.** See `apps/vscode/TESTING.md`.
+- **Verified inside a real editor.** All 5 integration tests pass against a
+  downloaded VS Code. Needs `@vscode/test-electron@^3.1.0` — the `2.5.2` this
+  was originally pinned to hardcodes the macOS launch path as
+  `Contents/MacOS/Electron`, which current VS Code stable builds renamed to
+  `Contents/MacOS/Code`. See `apps/vscode/TESTING.md`.
 
 ## Web IDE notes
 
@@ -523,13 +529,14 @@ React 19.
 
 ## Next
 
-Three verification debts, all written and wired, none executed:
+One verification debt left, written and wired, not executed:
 
-1. the VS Code integration suite against a real editor (needs the VS Code CDN),
-2. `DockerSandbox` against a live daemon.
+1. `DockerSandbox` against a live daemon.
 
-Each reports its own unverified state rather than letting a caller assume
-otherwise. (`PgVectorStore` against Postgres was the third; it is now
-verified — see `tests/core/test_pgvector_store.py`.) Beyond those: a worker
-process so a restored session can resume rather than only be read, and auth —
-without it none of this can be exposed.
+It reports its own unverified state rather than letting a caller assume
+otherwise. (Two others used to be on this list. `PgVectorStore` against
+Postgres is now verified — see `tests/core/test_pgvector_store.py`. The VS
+Code integration suite now runs against a real downloaded VS Code and all 5
+tests pass — see `apps/vscode/TESTING.md`.) Beyond that: a worker process so a
+restored session can resume rather than only be read, and auth — without it
+none of this can be exposed.
