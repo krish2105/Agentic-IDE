@@ -24,6 +24,7 @@
 #   scripts/serve.sh                       # port 8060, local origins
 #   PORT=8000 scripts/serve.sh
 #   EXTRA_ORIGINS=https://foo.vercel.app scripts/serve.sh
+#   SANI_NO_AUTH=1 scripts/serve.sh    # local only: no token, no tunnel allowed
 
 set -euo pipefail
 
@@ -77,14 +78,36 @@ if [ ! -x ./.venv/bin/uvicorn ]; then
 fi
 
 # --- auth -------------------------------------------------------------------
-if [ ! -f "$TOKEN_FILE" ]; then
-  umask 077
-  python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
-  chmod 600 "$TOKEN_FILE"
-  echo "generated a new auth token at $TOKEN_FILE"
+# `SANI_NO_AUTH=1` for the local-only setup: server on loopback, web IDE on
+# localhost, no tunnel. There is nothing to authenticate against a socket only
+# this machine can open, and requiring a token there costs two clipboard pastes
+# that have to be redone on every rotation -- which is the single largest source
+# of friction in getting this running, and every failure it causes looks like a
+# broken server.
+#
+# It is refused the moment a tunnel is up, because then the token is the only
+# thing between the internet and a shell.
+if [ "${SANI_NO_AUTH:-}" = "1" ]; then
+  if pgrep -f "cloudflared tunnel" >/dev/null 2>&1; then
+    echo "error: SANI_NO_AUTH=1 but a cloudflared tunnel is running." >&2
+    echo "         An open tunnel to an unauthenticated server is a remote shell." >&2
+    echo "         Stop the tunnel, or drop SANI_NO_AUTH." >&2
+    exit 1
+  fi
+  unset SANI_AUTH_TOKEN
+  AUTH_NOTE="OFF — loopback only, no token needed by the browser.
+             Do NOT start a tunnel while this is running."
+else
+  if [ ! -f "$TOKEN_FILE" ]; then
+    umask 077
+    python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+    echo "generated a new auth token at $TOKEN_FILE"
+  fi
+  SANI_AUTH_TOKEN="$(tr -d '\n' < "$TOKEN_FILE")"
+  export SANI_AUTH_TOKEN
+  AUTH_NOTE="on, token in $TOKEN_FILE"
 fi
-SANI_AUTH_TOKEN="$(tr -d '\n' < "$TOKEN_FILE")"
-export SANI_AUTH_TOKEN
 
 # --- model backend ----------------------------------------------------------
 # The key's presence decides this. Defaulting to `scripted` when it is absent is
@@ -152,7 +175,7 @@ export SANI_CORS_ORIGINS="$ORIGINS"
 cat <<BANNER
 Ṣāni' server
   port      : $PORT (loopback only — expose it with a tunnel, never --host 0.0.0.0)
-  auth      : on, token in $TOKEN_FILE
+  auth      : $AUTH_NOTE
   backend   : $BACKEND_NOTE
   origins   : $SANI_CORS_ORIGINS
 
