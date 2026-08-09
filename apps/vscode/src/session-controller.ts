@@ -23,10 +23,15 @@ export class SessionController implements vscode.Disposable {
   state: StreamState | null = null;
 
   get api(): SaniApi {
-    const configured = vscode.workspace
-      .getConfiguration("sani")
-      .get<string>("serverUrl", "http://127.0.0.1:8000");
-    return createApi(configured);
+    const settings = vscode.workspace.getConfiguration("sani");
+    const configured = settings.get<string>("serverUrl", "http://127.0.0.1:8000");
+    // The token is what makes a non-loopback server usable at all: the moment
+    // the backend is reached over a tunnel it must set SANI_AUTH_TOKEN, because
+    // the shell adapter executes commands. `createApi` already threads it onto
+    // both HTTP headers and the `?token=` the WebSocket needs -- the extension
+    // simply never passed one, so it 401'd against any authenticated server.
+    const token = settings.get<string>("authToken", "").trim();
+    return createApi(configured, token ? { token } : undefined);
   }
 
   onState(listener: StateListener): vscode.Disposable {

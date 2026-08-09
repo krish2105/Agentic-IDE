@@ -656,6 +656,18 @@ checks all six themes on both the landing page and a blocked session.
   was originally pinned to hardcodes the macOS launch path as
   `Contents/MacOS/Electron`, which current VS Code stable builds renamed to
   `Contents/MacOS/Code`. See `apps/vscode/TESTING.md`.
+- **`sani.authToken` is not optional once the server leaves loopback.** The
+  extension shipped with only `sani.serverUrl` and a description claiming the
+  server has no authentication — so against any server with `SANI_AUTH_TOKEN` it
+  401'd on every request, including the WebSocket. `createApi` already threaded a
+  token onto both the headers and the socket's `?token=`; the extension just
+  never passed one. Run the suite against an authenticated server with
+  `SANI_TEST_SERVER_URL` and `SANI_TEST_AUTH_TOKEN`.
+- **The test runner needs a short `--user-data-dir`.** VS Code puts its IPC
+  socket inside it, and macOS caps Unix domain socket paths at ~103 chars, so a
+  default under a deep checkout dies with `listen EINVAL: invalid argument` —
+  an error naming the socket rather than the cause. `.vscode-test.mjs` now
+  defaults to a `/tmp` path instead of making it opt-in.
 - **The extension inherits v2 for free.** Risk assessments and critiques
   arrive through `@sani/client`'s reducer without the extension asking for
   them; the webview only had to render them. There is a parity test — if it

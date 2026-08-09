@@ -1,6 +1,6 @@
 {
   "name": "sani-vscode",
-  "displayName": "\u1e62\u0101ni' Studio",
+  "displayName": "Ṣāni' Studio",
   "description": "Agentic coding sessions with visible autonomy: plan preview, tool-call disclosure, per-action approval",
   "version": "0.1.0",
   "private": true,
@@ -20,7 +20,7 @@
       "activitybar": [
         {
           "id": "sani",
-          "title": "\u1e62\u0101ni' Studio",
+          "title": "Ṣāni' Studio",
           "icon": "media/icon.svg"
         }
       ]
@@ -37,44 +37,44 @@
     "commands": [
       {
         "command": "sani.newSession",
-        "title": "\u1e62\u0101ni': New Session",
+        "title": "Ṣāni': New Session",
         "icon": "$(add)"
       },
       {
         "command": "sani.missionControl",
-        "title": "\u1e62\u0101ni': Mission Control"
+        "title": "Ṣāni': Mission Control"
       },
       {
         "command": "sani.attachSession",
-        "title": "\u1e62\u0101ni': Attach to Session"
+        "title": "Ṣāni': Attach to Session"
       },
       {
         "command": "sani.approve",
-        "title": "\u1e62\u0101ni': Approve Pending Action"
+        "title": "Ṣāni': Approve Pending Action"
       },
       {
         "command": "sani.reject",
-        "title": "\u1e62\u0101ni': Reject Pending Action"
+        "title": "Ṣāni': Reject Pending Action"
       },
       {
         "command": "sani.showDiff",
-        "title": "\u1e62\u0101ni': Show Diff for File"
+        "title": "Ṣāni': Show Diff for File"
       },
       {
         "command": "sani.pause",
-        "title": "\u1e62\u0101ni': Pause Session"
+        "title": "Ṣāni': Pause Session"
       },
       {
         "command": "sani.resume",
-        "title": "\u1e62\u0101ni': Resume Session"
+        "title": "Ṣāni': Resume Session"
       },
       {
         "command": "sani.kill",
-        "title": "\u1e62\u0101ni': Kill Session"
+        "title": "Ṣāni': Kill Session"
       },
       {
         "command": "sani.replay",
-        "title": "\u1e62\u0101ni': Replay Session"
+        "title": "Ṣāni': Replay Session"
       }
     ],
     "menus": {
@@ -87,12 +87,17 @@
       ]
     },
     "configuration": {
-      "title": "\u1e62\u0101ni' Studio",
+      "title": "Ṣāni' Studio",
       "properties": {
         "sani.serverUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8000",
-          "description": "Base URL of the \u1e62\u0101ni' server. The server has no authentication, so this should stay on localhost."
+          "description": "Base URL of the Ṣāni' server. Use an https:// tunnel URL to reach a backend that is not on this machine, and set sani.authToken to match."
+        },
+        "sani.authToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Bearer token, required when the server sets `SANI_AUTH_TOKEN`. Leave empty for a local unauthenticated server. **A server reachable off this machine must set a token — the shell tool executes commands.**"
         },
         "sani.showGutterMarks": {
           "type": "boolean",
