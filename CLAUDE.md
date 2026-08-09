@@ -575,11 +575,16 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
   snapshots, so the original is derived rather than fetched.
 - **`activate` returns `{ controller, openDiff }`** so integration tests can
   drive the real extension instead of reaching into module internals.
-- **Verified inside a real editor.** All 5 integration tests pass against a
+- **Verified inside a real editor.** All 7 integration tests pass against a
   downloaded VS Code. Needs `@vscode/test-electron@^3.1.0` — the `2.5.2` this
   was originally pinned to hardcodes the macOS launch path as
   `Contents/MacOS/Electron`, which current VS Code stable builds renamed to
   `Contents/MacOS/Code`. See `apps/vscode/TESTING.md`.
+- **The extension inherits v2 for free.** Risk assessments and critiques
+  arrive through `@sani/client`'s reducer without the extension asking for
+  them; the webview only had to render them. There is a parity test — if it
+  fails, the two surfaces have started to drift, which is exactly what the
+  shared-reducer rule exists to prevent.
 
 ## Web IDE notes
 

@@ -71,6 +71,10 @@
       {
         "command": "sani.kill",
         "title": "\u1e62\u0101ni': Kill Session"
+      },
+      {
+        "command": "sani.replay",
+        "title": "\u1e62\u0101ni': Replay Session"
       }
     ],
     "menus": {

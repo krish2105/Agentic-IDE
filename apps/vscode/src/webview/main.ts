@@ -6,7 +6,7 @@
  * and shipping React into every webview instance would cost more than it saves.
  */
 
-import type { FileDiff, StreamState } from "@sani/client";
+import type { Critique, FileDiff, RiskAssessment, StreamState } from "@sani/client";
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 const vscode = acquireVsCodeApi();
@@ -91,6 +91,9 @@ function renderApproval(body: HTMLElement): void {
   card.append(el("div", undefined, pending.action.summary));
   card.append(el("div", "muted mono", pending.decision.reason));
 
+  renderRisk(card, pending.risk);
+  renderCritique(card, pending.critique);
+
   const command = (pending.action.preview as any)?.command;
   if (command) {
     const pre = el("pre", undefined, `$ ${command}`);
@@ -142,6 +145,71 @@ function renderApproval(body: HTMLElement): void {
   actions.append(approve, reject);
   card.append(actions);
   body.append(card);
+}
+
+/**
+ * Blast radius, before the decision.
+ *
+ * The same server-computed assessment the web IDE shows -- it arrives through
+ * the shared reducer, so the two surfaces cannot disagree about the stakes of
+ * an action. The score is the summary; the factors are the feature.
+ */
+function renderRisk(card: HTMLElement, risk: RiskAssessment | undefined): void {
+  if (!risk) return;
+
+  const band = el("div", `risk risk-${risk.band}`);
+  band.append(
+    el("strong", undefined, `${risk.band.toUpperCase()} risk`),
+    el("span", "muted mono", ` ${risk.score}/100`),
+  );
+  card.append(band);
+
+  card.append(
+    el(
+      "div",
+      "muted",
+      risk.reversible
+        ? "Reversible — the previous state can be recovered."
+        : "Cannot be undone from inside Ṣāni'.",
+    ),
+  );
+
+  // Collapsed by default: a wall of reasoning on every approval trains people
+  // to skip all of it.
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.className = "muted mono";
+  summary.textContent = `why — ${risk.factors.length} factor${risk.factors.length === 1 ? "" : "s"}`;
+  details.append(summary);
+  for (const factor of risk.factors) {
+    details.append(el("div", "muted", `· ${factor}`));
+  }
+  card.append(details);
+}
+
+/** The second opinion, when a critic is configured. */
+function renderCritique(card: HTMLElement, critique: Critique | undefined): void {
+  if (!critique) return;
+
+  if (critique.error) {
+    card.append(el("div", "muted mono", "Second opinion unavailable — the critic errored."));
+    return;
+  }
+  // Silent when it has nothing to say: a critic that says "looks fine" on every
+  // screen is one nobody reads on the screen that mattered.
+  if (critique.clean && !critique.concerns.length) return;
+
+  const label =
+    critique.verdict === "likely-wrong"
+      ? "Likely wrong"
+      : critique.verdict === "concerns"
+        ? "Worth a look"
+        : "No concerns";
+
+  card.append(el("div", "critique", `${label} — second opinion (${critique.reviewed_by})`));
+  for (const concern of critique.concerns) {
+    card.append(el("div", "muted", `· ${concern}`));
+  }
 }
 
 function renderChat(body: HTMLElement): void {

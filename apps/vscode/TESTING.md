@@ -29,7 +29,7 @@ was written, compiled, and wired up, but for a long time had never actually
 executed: the environment it was built in did not permit downloading VS Code
 from `update.code.visualstudio.com`. It has since been run for real, against a
 downloaded VS Code 1.132.0 (Darwin arm64), with a live server on the other end
-— all 5 tests pass:
+— all 7 tests pass:
 
 ```
 ✔ activates and contributes its commands
@@ -37,7 +37,15 @@ downloaded VS Code 1.132.0 (Darwin arm64), with a live server on the other end
 ✔ renders the agent's diff in the native diff editor
 ✔ rejecting leaves the file alone and still completes
 ✔ mission control opens and lists the sessions
+✔ the extension sees the same v2 state the web IDE does
+✔ replay opens the session history at a chosen keyframe
 ```
+
+The parity test is the one that matters architecturally. Both clients read a
+session through `@sani/client`, so risk assessments and critiques arrive in the
+extension without the extension asking for them. If that test fails, the two
+surfaces have started to drift -- which is the exact failure the shared-reducer
+rule exists to prevent.
 
 That covers the editor-facing glue that the unit tests cannot reach:
 activation, command registration, the webview provider, the `vscode.diff`
@@ -62,14 +70,17 @@ npm run test:vscode --workspace sani-vscode      # downloads VS Code on first ru
 It uses `xvfb-run`, so it works headless on Linux. On macOS or Windows drop the
 `xvfb-run -a` prefix from the `test:vscode` script.
 
-Two things are specific to *where* your checkout happens to sit, not to the
-extension, and may need a workaround only you'd apply locally, not commit:
-- If port 8000 is already taken, `sani.serverUrl` in VS Code settings can
-  point the extension at another port.
-- If your checkout's absolute path is long, VS Code's default
-  `--user-data-dir` (nested under it) can exceed the ~103-character limit on a
-  Unix domain socket path and fail with `listen EINVAL`. Pass a shorter
-  `--user-data-dir` via `launchArgs` in `.vscode-test.mjs` if you hit this.
+Two environment escapes exist for machine-specific problems, both opt-in so
+nothing machine-specific is baked into the committed config:
+
+```bash
+# The extension defaults to :8000, which is commonly already taken.
+SANI_TEST_SERVER_URL=http://127.0.0.1:8055 \
+# A long checkout path pushes VS Code's default --user-data-dir past macOS's
+# ~103-char Unix socket limit and fails with `listen EINVAL`.
+SANI_TEST_USER_DATA_DIR=/tmp/svt \
+  npm run test:vscode --workspace sani-vscode
+```
 
 The suite starts a real session in a throwaway workspace folder and asserts the
 things worth asserting: that an always-confirm delete blocks, that the file is

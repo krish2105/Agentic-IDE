@@ -1,4 +1,4 @@
-import type { StreamState } from "@sani/client";
+import { foldTo, type StreamState } from "@sani/client";
 import * as vscode from "vscode";
 import { AgentGutter } from "./decorations.ts";
 import { OriginalContentProvider, ORIGINAL_SCHEME, showNativeDiff } from "./diff-view.ts";
@@ -173,6 +173,57 @@ export function activate(context: vscode.ExtensionContext): SaniExtensionApi {
     vscode.commands.registerCommand("sani.pause", () => handleIntent({ type: "pause" })),
     vscode.commands.registerCommand("sani.resume", () => handleIntent({ type: "resume" })),
     vscode.commands.registerCommand("sani.kill", () => handleIntent({ type: "kill" })),
+
+    vscode.commands.registerCommand("sani.replay", async () => {
+      if (!controller.sessionId) {
+        vscode.window.showInformationMessage("Ṣāni': no session to replay.");
+        return;
+      }
+      try {
+        const timeline = await controller.api.timeline(controller.sessionId);
+        if (timeline.keyframes.length === 0) {
+          vscode.window.showInformationMessage("Ṣāni': nothing recorded yet.");
+          return;
+        }
+
+        // Keyframes rather than a scrubber: a quick-pick is the honest VS Code
+        // idiom here, and the moments worth jumping to are exactly what the
+        // server already computed for the web scrubber.
+        const picked = await vscode.window.showQuickPick(
+          timeline.keyframes.map((frame) => ({
+            label: frame.label,
+            description: `seq ${frame.seq}`,
+            detail: frame.kind,
+            seq: frame.seq,
+          })),
+          { title: `Replay — ${timeline.count} events` },
+        );
+        if (!picked) return;
+
+        const at = foldTo(timeline.events, picked.seq);
+        const lines = [
+          `# Ṣāni' replay — seq ${picked.seq}/${timeline.last_seq}`,
+          "",
+          `**${picked.label}**`,
+          "",
+          `Status at this moment: \`${at.status}\``,
+          `Files changed so far: ${Object.keys(at.diffs).length}`,
+          `Plan steps: ${at.steps.length}`,
+          "",
+          "## Transcript to this point",
+          "",
+          ...at.chat.map((item) => `- ${item.text}${item.detail ? ` — ${item.detail}` : ""}`),
+        ];
+
+        const document = await vscode.workspace.openTextDocument({
+          language: "markdown",
+          content: lines.join("\n"),
+        });
+        await vscode.window.showTextDocument(document, { preview: true });
+      } catch (error) {
+        vscode.window.showErrorMessage(`Ṣāni': ${describe(error)}`);
+      }
+    }),
 
     vscode.commands.registerCommand("sani.showDiff", async () => {
       const diffs = Object.keys(controller.state?.diffs ?? {});

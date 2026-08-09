@@ -112,6 +112,16 @@ export class SaniSidebar implements vscode.WebviewViewProvider {
         font-size: 11px; max-height: 180px; overflow: auto; }
   .item { margin-bottom: 9px; font-size: 12px; }
   .diff-link { cursor: pointer; color: var(--vscode-textLink-foreground); }
+  /* Risk and critique use VS Code's own semantic colours so they read correctly
+     in whatever theme the user actually has. */
+  .risk { margin: 6px 0 2px; font-size: 12px; }
+  .risk-low { color: var(--vscode-testing-iconPassed, #4ade80); }
+  .risk-medium { color: var(--vscode-editorWarning-foreground, #f5a524); }
+  .risk-high, .risk-critical { color: var(--vscode-editorError-foreground, #f87171); }
+  .critique { margin: 6px 0 2px; font-size: 12px;
+              color: var(--vscode-editorWarning-foreground, #f5a524); }
+  details { margin-top: 4px; }
+  summary { cursor: pointer; }
   .hunk { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
   .ok { color: var(--vscode-testing-iconPassed, #4ade80); }
   .bad { color: var(--vscode-testing-iconFailed, #f87171); }
