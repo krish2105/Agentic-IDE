@@ -1,33 +1,211 @@
 @import "tailwindcss";
 
 /*
- * Dark-first, per spec Section 6.
+ * Ṣāni' Studio — Glass Cockpit design system.
  *
- * One rule governs colour here: `--color-agent` is reserved exclusively for
- * agent-authored things -- agent messages, agent-written lines, agent diffs.
- * Nothing else may use it, because its whole job is to let a glance at the
- * screen tell you human origin from agent origin. `--color-attention` is
- * separate and means "this needs *you*", which is a different question.
+ * THE SACRED RULE, unchanged from v1 and preserved in all six themes:
+ *
+ *   --color-agent      violet   agent-authored things ONLY
+ *   --color-attention  amber    "this needs *you*" ONLY
+ *   --color-risk       red      computed risk ONLY  (new in v2)
+ *
+ * Three reserved channels, no exceptions. A glance at the screen must separate
+ * human origin from agent origin from "you have a decision to make". Everything
+ * else draws from the neutral ramp or the theme's chrome hue.
+ *
+ * Themes re-tune these three for contrast against their own base. They never
+ * re-assign them: violet is never "just an accent" in any theme.
+ *
+ * Structure: @theme maps Tailwind's token names onto indirection variables
+ * (--t-*), and each [data-theme] block supplies the actual values. That is what
+ * makes a theme swap a variable change rather than a repaint.
  */
+
 @theme {
-  --color-base: #0b0d12;
-  --color-surface: #12151c;
-  --color-raised: #181c25;
-  --color-edge: #252b37;
-  --color-edge-strong: #333b4a;
+  --color-base: var(--t-base);
+  --color-surface: var(--t-surface);
+  --color-raised: var(--t-raised);
+  --color-edge: var(--t-edge);
+  --color-edge-strong: var(--t-edge-strong);
 
-  --color-ink: #e6e9ef;
-  --color-ink-dim: #9aa3b2;
-  --color-ink-faint: #626c7d;
+  --color-ink: var(--t-ink);
+  --color-ink-dim: var(--t-ink-dim);
+  --color-ink-faint: var(--t-ink-faint);
 
-  --color-agent: #a78bfa;
-  --color-agent-dim: #6d28d9;
-  --color-attention: #f5a524;
-  --color-ok: #4ade80;
-  --color-danger: #f87171;
+  --color-agent: var(--t-agent);
+  --color-agent-dim: var(--t-agent-dim);
+  --color-attention: var(--t-attention);
+  --color-attention-dim: var(--t-attention-dim);
+  --color-risk: var(--t-risk);
+  --color-risk-mid: var(--t-risk-mid);
+  --color-ok: var(--t-ok);
+  --color-danger: var(--t-danger);
 
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --color-chrome: var(--t-chrome);
+
+  --font-sans: var(--font-display), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-code), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-swift: cubic-bezier(0.32, 0.72, 0, 1);
 }
+
+/* ---------------------------------------------------------------- themes -- */
+
+:root,
+[data-theme="void"] {
+  --t-base: #08090d;
+  --t-surface: #0f1117;
+  --t-raised: #161a22;
+  --t-edge: #222735;
+  --t-edge-strong: #333a4d;
+  --t-ink: #e9ecf3;
+  --t-ink-dim: #99a2b4;
+  --t-ink-faint: #5e6779;
+  --t-agent: #a78bfa;
+  --t-agent-dim: #6d3fe0;
+  --t-attention: #f5a524;
+  --t-attention-dim: #a86c0c;
+  --t-risk: #f87171;
+  --t-risk-mid: #f5a524;
+  --t-ok: #4ade80;
+  --t-danger: #f87171;
+  --t-chrome: #6b7280;
+  --ambient-hue: 250;
+  --ambient-sat: 60%;
+}
+
+[data-theme="nebula"] {
+  --t-base: #09071a;
+  --t-surface: #110e28;
+  --t-raised: #191434;
+  --t-edge: #281f4a;
+  --t-edge-strong: #3b2f6b;
+  --t-ink: #ebe8fa;
+  --t-ink-dim: #a49dc8;
+  --t-ink-faint: #6b6490;
+  --t-agent: #b9a3ff;
+  --t-agent-dim: #7c4dff;
+  --t-attention: #ffb340;
+  --t-attention-dim: #b3730f;
+  --t-risk: #ff7b8a;
+  --t-risk-mid: #ffb340;
+  --t-ok: #5ce89a;
+  --t-danger: #ff7b8a;
+  --t-chrome: #7d74b0;
+  --ambient-hue: 268;
+  --ambient-sat: 72%;
+}
+
+[data-theme="aurora"] {
+  --t-base: #03100f;
+  --t-surface: #071a1b;
+  --t-raised: #0c2325;
+  --t-edge: #16343a;
+  --t-edge-strong: #1f4c55;
+  --t-ink: #e4f3f2;
+  --t-ink-dim: #8fb3b4;
+  --t-ink-faint: #567376;
+  /* Violet against teal is the highest-contrast agent signal of any theme. */
+  --t-agent: #bda0ff;
+  --t-agent-dim: #7b4ce0;
+  --t-attention: #ffc247;
+  --t-attention-dim: #a97c10;
+  --t-risk: #ff8080;
+  --t-risk-mid: #ffc247;
+  --t-ok: #43e5b0;
+  --t-danger: #ff8080;
+  --t-chrome: #5f9ea3;
+  --ambient-hue: 172;
+  --ambient-sat: 62%;
+}
+
+[data-theme="solar"] {
+  --t-base: #100b07;
+  --t-surface: #1b130c;
+  --t-raised: #241a11;
+  --t-edge: #37271a;
+  --t-edge-strong: #4e3a26;
+  --t-ink: #f3ebe1;
+  --t-ink-dim: #b8a68f;
+  --t-ink-faint: #7d6c58;
+  --t-agent: #bb9dff;
+  --t-agent-dim: #7c4ee6;
+  --t-attention: #ffb02e;
+  --t-attention-dim: #ad6f08;
+  --t-risk: #ff7f6b;
+  --t-risk-mid: #ffb02e;
+  --t-ok: #7ed957;
+  --t-danger: #ff7f6b;
+  --t-chrome: #9a7d5c;
+  --ambient-hue: 28;
+  --ambient-sat: 55%;
+}
+
+/*
+ * Mono: the connoisseur's theme. Chrome is pure neutral, so the only hue on the
+ * entire screen is agent violet, attention amber, and risk red. The semantic
+ * rule stops being a convention here and becomes the literal visual grammar.
+ */
+[data-theme="mono"] {
+  --t-base: #0a0a0a;
+  --t-surface: #121212;
+  --t-raised: #191919;
+  --t-edge: #272727;
+  --t-edge-strong: #3b3b3b;
+  --t-ink: #ededed;
+  --t-ink-dim: #9c9c9c;
+  --t-ink-faint: #5f5f5f;
+  --t-agent: #a78bfa;
+  --t-agent-dim: #6d3fe0;
+  --t-attention: #f5a524;
+  --t-attention-dim: #a86c0c;
+  --t-risk: #f87171;
+  --t-risk-mid: #f5a524;
+  --t-ok: #d4d4d4;
+  --t-danger: #f87171;
+  --t-chrome: #6e6e6e;
+  --ambient-hue: 0;
+  --ambient-sat: 0%;
+}
+
+[data-theme="daylight"] {
+  --t-base: #fbfaf7;
+  --t-surface: #ffffff;
+  --t-raised: #f4f2ec;
+  --t-edge: #e3ded3;
+  --t-edge-strong: #cec7b8;
+  --t-ink: #16181d;
+  --t-ink-dim: #5b6270;
+  --t-ink-faint: #8b93a3;
+  /* Darkened so the agent channel still reads at 4.5:1 on white. */
+  --t-agent: #6d28d9;
+  --t-agent-dim: #a78bfa;
+  --t-attention: #b45309;
+  --t-attention-dim: #f5a524;
+  --t-risk: #b91c1c;
+  --t-risk-mid: #b45309;
+  --t-ok: #15803d;
+  --t-danger: #b91c1c;
+  --t-chrome: #8b8578;
+  --ambient-hue: 40;
+  --ambient-sat: 30%;
+}
+
+/* --------------------------------------------------------------- ambient -- */
+
+/*
+ * Reactive state colour. The ambient layer breathes with session status: it
+ * changes the temperature of the room without ever touching the three reserved
+ * channels. Written by useAmbientState(); read by the shader and the shell.
+ */
+:root {
+  --ambient-intensity: 0.35;
+  --ambient-speed: 1;
+  --ambient-shift: 0;
+}
+
+/* ------------------------------------------------------------------ base -- */
 
 html,
 body {
@@ -35,11 +213,21 @@ body {
   background: var(--color-base);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   overflow: hidden;
+  /* Theme swaps cross-fade rather than snapping. Only colour transitions --
+     never layout, which would jank the editor. */
+  transition:
+    background-color 400ms var(--ease-settle),
+    color 400ms var(--ease-settle);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-agent) 30%, transparent);
 }
 
 ::-webkit-scrollbar {
@@ -49,15 +237,50 @@ body {
 ::-webkit-scrollbar-thumb {
   background: var(--color-edge-strong);
   border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--color-edge-strong) 70%, var(--color-ink));
+  background-clip: content-box;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 
+/* Focus is never removed, only restyled. Keyboard users are first-class. */
+:focus-visible {
+  outline: 2px solid var(--color-agent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ------------------------------------------------------------ primitives -- */
+
 /* Agent-authored lines in a diff. The left border is the tell. */
 .agent-line {
   border-left: 2px solid var(--color-agent);
 }
+
+.glass {
+  background: color-mix(in oklab, var(--color-surface) 82%, transparent);
+  border: 1px solid var(--color-edge);
+}
+
+/* backdrop-filter costs 15-30% FPS on mid-tier Android, so it is applied only
+   at elevation 2+ -- nav, modals, approval cards -- never on scrolling regions. */
+.glass-elevated {
+  background: color-mix(in oklab, var(--color-raised) 72%, transparent);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid color-mix(in oklab, var(--color-edge-strong) 60%, transparent);
+}
+
+.hairline {
+  border-color: color-mix(in oklab, var(--color-edge) 80%, transparent);
+}
+
+/* ---------------------------------------------------------------- motion -- */
 
 @keyframes pulse-attention {
   0%,
@@ -68,6 +291,62 @@ body {
     opacity: 0.55;
   }
 }
+
+/* The ONLY looping animation permitted in the product. Everything else is
+   state-driven and settles. */
 .pulse-attention {
-  animation: pulse-attention 1.8s ease-in-out infinite;
+  animation: pulse-attention 1.8s var(--ease-settle) infinite;
+}
+
+@keyframes ambient-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -1.5%, 0) scale(1.06);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-raised);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color-ink) 6%, transparent),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+/*
+ * The reduced-motion contract: nothing loops, nothing drifts, everything is
+ * still legible. Quality tier is forced to `minimal` alongside this, so the
+ * shader field and 3D scenes are already gone by the time this applies.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
