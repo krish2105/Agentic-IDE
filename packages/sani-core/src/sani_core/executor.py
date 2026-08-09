@@ -27,7 +27,7 @@ from .permissions import evaluate
 from .plan import PlanStep, StepStatus
 from .risk import assess
 from .session import AgentSession, SessionStatus
-from .tools.base import ToolAdapter, ToolError
+from .tools.base import ToolAdapter, ToolError, UnknownTool
 
 EmitFn = Callable[[Event], Awaitable[None]]
 
@@ -136,7 +136,32 @@ class Executor:
                 step.status = StepStatus.RUNNING
                 await self._emit(EventType.PLAN_STEP_STARTED, {"step": step.to_dict()})
 
-                await self._run_step(step)
+                try:
+                    await self._run_step(step)
+                except ToolError as exc:
+                    # A tool that *raises* must fail its step, not the session.
+                    # The graceful path below only ever covered a tool that
+                    # returned an unsuccessful result -- so a plan whose first
+                    # step read a filename the model guessed wrong threw away
+                    # every valid step after it. The failure is still reported
+                    # as a tool.result: a step that quietly disappears is worse
+                    # than one that failed loudly.
+                    step.status = StepStatus.FAILED
+                    step.detail = str(exc)
+                    await self._emit(
+                        EventType.TOOL_RESULT,
+                        {
+                            "action_id": None,
+                            "step_index": step.index,
+                            "result": {
+                                "ok": False,
+                                "summary": str(exc),
+                                "output": "",
+                                "data": {},
+                                "diff": None,
+                            },
+                        },
+                    )
 
                 await self._emit(EventType.PLAN_STEP_COMPLETED, {"step": step.to_dict()})
                 # Cost rides along with the token meter rather than getting its
@@ -179,7 +204,10 @@ class Executor:
     async def _run_step(self, step: PlanStep) -> None:
         tool = self.tools.get(step.tool)
         if tool is None:
-            raise ToolError(
+            # Structural, not runtime: this fails the session, because every
+            # step using that tool would fail identically and the useful signal
+            # is "your tool configuration is wrong".
+            raise UnknownTool(
                 f"step {step.index} requests unknown tool {step.tool!r} "
                 f"(session has {sorted(self.tools)})"
             )

@@ -55,9 +55,9 @@ because `packages/` also holds a TypeScript package.
 uv sync                                          # install the Python workspace
 npm install                                      # install all TS workspaces (root)
 
-uv run pytest                                    # 223 tests, ~31s
+uv run pytest                                    # 354 tests, ~30s
 uv run pytest tests/server/test_safety.py        # the safety-critical tier
-npm run test:client                              # 27 shared-client tests
+npm run test:client                              # 45 shared-client tests (needs Node 22.6+)
 npm run test:e2e                                 # Playwright, needs both servers up
 npm run typecheck                                # all three TS workspaces
 
@@ -620,7 +620,12 @@ inlined at **build** time, and rebuilding under a running `next start` corrupts
 - `pause` takes effect at the next **step boundary**. A tool call already
   running finishes rather than being interrupted mid-write. Same for `kill`.
 - A failing tool call marks its step `failed` and the plan continues.
-  Self-correction is a later phase.
+  Self-correction is a later phase. **This now holds for a tool that
+  *raises* as well as one that returns a failed result** — it previously
+  only covered the latter, so a plan whose first step read a filename the
+  model guessed wrong discarded every valid step after it. An unknown tool
+  is the deliberate exception and still fails the session: it is structural,
+  and the useful signal is "your tool configuration is wrong".
 - Context compaction is accounting plus a no-op hook. Token counts are
   `len/4` estimates, flagged `"estimated": true`.
 

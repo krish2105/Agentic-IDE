@@ -20,6 +20,17 @@ from ..plan import PlanStep
 from ..runners import CommandRunner, LocalCommandRunner
 
 
+class UnknownTool(Exception):
+    """The plan referenced a tool this session was not given.
+
+    Structural, not runtime: every step using that tool will fail the same way,
+    and the useful signal is "your tool configuration is wrong" rather than a
+    per-step failure repeated N times. Kept distinct from ToolError so the
+    executor can fail the session on this while letting a runtime tool failure
+    fail only its own step.
+    """
+
+
 class ToolError(Exception):
     pass
 
