@@ -12,6 +12,7 @@ import type {
   FileDiff,
   Plan,
   PlanStep,
+  Critique,
   ProposedAction,
   RiskAssessment,
   SaniEvent,
@@ -35,6 +36,8 @@ export interface PendingApproval {
   decision: Decision;
   /** Blast radius, when the server assessed it. Older servers omit this. */
   risk?: RiskAssessment;
+  /** Second-opinion review, when a critic is configured. */
+  critique?: Critique;
 }
 
 export interface StreamState {
@@ -51,6 +54,8 @@ export interface StreamState {
    *  approval it describes, so it is parked here until they can be shown
    *  together. */
   riskByAction: Record<string, RiskAssessment>;
+  /** Critiques keyed by action id, parked the same way risk is. */
+  critiqueByAction: Record<string, Critique>;
   diffs: Record<string, FileDiff>;
   chat: ChatItem[];
   context: ContextUsage | null;
@@ -70,6 +75,7 @@ export const initialStreamState: StreamState = {
   currentStep: null,
   pending: null,
   riskByAction: {},
+  critiqueByAction: {},
   diffs: {},
   chat: [],
   context: null,
@@ -156,11 +162,22 @@ export function reduceEvent(state: StreamState, event: SaniEvent): StreamState {
       }
       return next;
 
+    case "critique.emitted":
+      next.critiqueByAction = {
+        ...state.critiqueByAction,
+        [event.data.action_id]: event.data.critique,
+      };
+      if (next.pending && next.pending.action.id === event.data.action_id) {
+        next.pending = { ...next.pending, critique: event.data.critique };
+      }
+      return next;
+
     case "approval.required":
       next.pending = {
         action: event.data.action,
         decision: event.data.decision,
         risk: state.riskByAction[event.data.action.id],
+        critique: state.critiqueByAction[event.data.action.id],
       };
       return next;
 

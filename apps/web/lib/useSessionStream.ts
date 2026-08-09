@@ -58,6 +58,7 @@ const EMPTY_STATE: StreamState = {
   currentStep: null,
   pending: null,
   riskByAction: {},
+  critiqueByAction: {},
   diffs: {},
   chat: [],
   context: null,

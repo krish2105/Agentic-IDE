@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { springs } from "@/lib/motion";
 import type { PendingApproval } from "@/lib/useSessionStream";
 import { DiffView } from "./DiffView";
+import { CritiqueNote } from "./CritiqueNote";
 import { RiskDial } from "./RiskDial";
 
 interface Props {
@@ -87,9 +88,10 @@ export function ApprovalCard({ pending, onApprove, onReject, busy }: Props) {
 
         {/* Blast radius, before the decision rather than after it. Absent when
             talking to a server that predates risk assessment. */}
-        {pending.risk && (
-          <div className="mb-3">
-            <RiskDial risk={pending.risk} />
+        {(pending.risk || pending.critique) && (
+          <div className="mb-3 space-y-2">
+            {pending.risk && <RiskDial risk={pending.risk} />}
+            {pending.critique && <CritiqueNote critique={pending.critique} />}
           </div>
         )}
 

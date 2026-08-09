@@ -25,6 +25,7 @@ from .events import Event, EventType
 from .models.base import ModelAdapter
 from .permissions import evaluate
 from .plan import PlanStep, StepStatus
+from .critic import Critic, NullCritic
 from .risk import assess
 from .session import AgentSession, SessionStatus
 from .tools.base import ToolAdapter, ToolError, UnknownTool
@@ -51,12 +52,16 @@ class Executor:
         emit: EmitFn,
         registry: ApprovalRegistry | None = None,
         retriever: Retriever | None = None,
+        critic: Critic | None = None,
     ) -> None:
         self.session = session
         self.tools = tools
         self.model = model
         self.registry = registry or ApprovalRegistry()
         self.retriever = retriever
+        # Off unless configured: a second inference per gated action costs
+        # real money and shows up in the meter the user is watching.
+        self.critic = critic or NullCritic()
         self._emit_fn = emit
         self._resume = asyncio.Event()
         self._resume.set()
@@ -273,6 +278,33 @@ class Executor:
             EventType.RISK_ASSESSED,
             {"action_id": action.id, "risk": assess(action).to_dict()},
         )
+
+        # A second opinion on the agent's own output, for the documented top
+        # failure: code that looks right. Advisory -- it cannot approve, reject
+        # or delay anything, and a critic that throws must never be what stops
+        # a human being asked for a decision.
+        if not isinstance(self.critic, NullCritic):
+            try:
+                critique = await self.critic.review(action, self.session.task)
+                await self._emit(
+                    EventType.CRITIQUE_EMITTED,
+                    {"action_id": action.id, "critique": critique.to_dict()},
+                )
+            except Exception as exc:
+                await self._emit(
+                    EventType.CRITIQUE_EMITTED,
+                    {
+                        "action_id": action.id,
+                        "critique": {
+                            "verdict": "looks-right",
+                            "confidence": 0.0,
+                            "concerns": [],
+                            "reviewed_by": None,
+                            "clean": True,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        },
+                    },
+                )
 
         await self._emit(
             EventType.APPROVAL_REQUIRED,

@@ -31,6 +31,7 @@ export type EventType =
   | "tool.proposed"
   | "approval.required"
   | "risk.assessed"
+  | "critique.emitted"
   | "approval.resolved"
   | "tool.result"
   | "diff.generated"
@@ -75,6 +76,23 @@ export interface RiskAssessment {
   lines_changed: number;
   files_touched: number;
   factors: string[];
+}
+
+export type CritiqueVerdict = "looks-right" | "concerns" | "likely-wrong";
+
+/**
+ * A second opinion on the agent's own output, computed server-side before the
+ * diff reaches you. Advisory: it never gates, approves, or delays anything.
+ */
+export interface Critique {
+  verdict: CritiqueVerdict;
+  confidence: number;
+  concerns: string[];
+  reviewed_by: string | null;
+  clean: boolean;
+  /** Present when the critic itself failed. A broken critic is reported, not
+   *  hidden -- and never blocks the approval. */
+  error?: string;
 }
 
 export interface FileDiff {

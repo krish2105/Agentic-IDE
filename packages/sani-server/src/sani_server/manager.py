@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from sani_core.approvals import ApprovalRegistry
+from sani_core.critic import build_critic
 from sani_core.events import EventType
 from sani_core.executor import Executor
 from sani_core.models import build_model
@@ -28,6 +29,10 @@ from .hub import SessionHub
 from .runner import SandboxCommandRunner
 from .sandbox import build_sandbox
 from .stores import MemorySessionStore, SessionRecord, SessionStore, UnknownSession
+
+#: ``none`` (default) or ``scripted``. A critic costs a second inference per
+#: gated action, so it is opt-in.
+CRITIC_ENV_VAR = "SANI_CRITIC"
 
 #: When set, every session workspace must live inside this directory.
 WORKSPACE_ROOT_ENV = "SANI_WORKSPACE_ROOT"
@@ -230,6 +235,7 @@ class SessionManager:
             emit=emit,
             registry=ApprovalRegistry(),
             retriever=retrieve,
+            critic=build_critic(os.environ.get(CRITIC_ENV_VAR)),
         )
         record = SessionRecord(
             session=session, hub=hub, executor=executor, sandbox=sandbox
