@@ -92,10 +92,48 @@ export SANI_AUTH_TOKEN
 # that silently failed every plan would be worse than one that replays a demo.
 if [ -s "$GROQ_FILE" ]; then
   GROQ_API_KEY="$(tr -d '\n' < "$GROQ_FILE")"
+
+  # Reject the placeholder from the instructions. Pasting the example verbatim is
+  # an easy slip, and the consequence is silent until you run a session: the
+  # banner cheerfully says `litellm` and then every plan dies on "Invalid API
+  # Key". A refusal here costs a second and says exactly what to do.
+  case "$GROQ_API_KEY" in
+    gsk_your_real_key|gsk_...|*your_real_key*|*YOUR_KEY*|*gsk_\.\.\.*)
+      echo "error: $GROQ_FILE contains the placeholder from the docs, not a key." >&2
+      echo "         Replace 'gsk_your_real_key' with your actual key from" >&2
+      echo "         https://console.groq.com/keys :" >&2
+      echo >&2
+      echo "           umask 077; printf %s 'gsk_ACTUAL_KEY_HERE' > $GROQ_FILE" >&2
+      echo >&2
+      echo "         Or delete the file to run on the scripted backend:  rm $GROQ_FILE" >&2
+      exit 1
+      ;;
+  esac
+
+  # Verify it before serving. Otherwise the first sign of a bad key is a failed
+  # session several clicks later, which looks like a bug in the agent rather than
+  # a credential problem. A network failure is not treated as a bad key -- being
+  # offline should not stop the server from starting.
+  KEY_CHECK="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    -H "Authorization: Bearer $GROQ_API_KEY" \
+    https://api.groq.com/openai/v1/models 2>/dev/null || echo 000)"
+  case "$KEY_CHECK" in
+    200) KEY_NOTE="key verified against Groq" ;;
+    401|403)
+      echo "error: Groq rejected the key in $GROQ_FILE (HTTP $KEY_CHECK)." >&2
+      echo "         Get a fresh one at https://console.groq.com/keys, then:" >&2
+      echo "           umask 077; printf %s 'gsk_...' > $GROQ_FILE" >&2
+      exit 1
+      ;;
+    000) KEY_NOTE="key NOT verified — could not reach Groq (offline?)" ;;
+    *)   KEY_NOTE="key check returned HTTP $KEY_CHECK — proceeding anyway" ;;
+  esac
+
   export GROQ_API_KEY
   export SANI_MODEL_BACKEND=litellm
   export SANI_MODEL="${SANI_MODEL:-groq/llama-3.3-70b-versatile}"
-  BACKEND_NOTE="litellm · $SANI_MODEL"
+  BACKEND_NOTE="litellm · $SANI_MODEL
+             $KEY_NOTE"
 else
   export SANI_MODEL_BACKEND=scripted
   BACKEND_NOTE="scripted — replays a fixed demo plan and IGNORES your task.

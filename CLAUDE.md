@@ -544,9 +544,13 @@ banner now names the backend for exactly that reason. A missing key defaults to
 `scripted` rather than failing, because the suite must run with no credentials —
 but that trade is only defensible if the choice is visible.
 
-A bad key is not silent: the planning call fails and the session ends `failed`
-with the provider's own message (`GroqException - Invalid API Key`), which is
-the useful signal.
+A bad key is caught at startup, not at session time: `serve.sh` calls Groq's
+`/models` once and refuses to serve on a 401, because otherwise the first sign
+of a bad credential is a failed session several clicks later, which reads as a
+bug in the agent. It also rejects the placeholder from its own instructions —
+pasting `gsk_your_real_key` verbatim is an easy slip whose only symptom would be
+a banner saying `litellm` and every plan dying. Being offline is not treated as
+a bad key; the banner says the key could not be verified and serving continues.
 
 ---
 
