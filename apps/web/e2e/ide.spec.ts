@@ -160,7 +160,7 @@ test.describe("Ṣāni' Studio web IDE", () => {
     const created = await fetch(`${SERVER}/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ task: "trust ladder check", workspace, script: [] }),
+      body: JSON.stringify({ task: "trust ladder check", workspace, script: [], model_backend: "scripted" }),
     });
     const { session_id: sessionId } = await created.json();
 
@@ -186,7 +186,7 @@ test.describe("Ṣāni' Studio web IDE", () => {
       const created = await fetch(`${SERVER}/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ task, workspace, script: [] }),
+        body: JSON.stringify({ task, workspace, script: [], model_backend: "scripted" }),
       });
       ids.push((await created.json()).session_id);
     }
@@ -273,7 +273,7 @@ test.describe("Ṣāni' Studio web IDE", () => {
     const created = await fetch(`${SERVER}/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders() },
-      body: JSON.stringify({ task: "editor save check", workspace, script: [] }),
+      body: JSON.stringify({ task: "editor save check", workspace, script: [], model_backend: "scripted" }),
     });
     const { session_id: sessionId } = await created.json();
 

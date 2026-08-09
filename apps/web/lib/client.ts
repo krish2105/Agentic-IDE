@@ -4,6 +4,7 @@ import {
   createApi,
   diagnoseConnection,
   explainProblem,
+  normalizeServerUrl,
   type ConnectionProblem,
   type SaniApi,
 } from "@sani/client";
@@ -81,7 +82,11 @@ export function onConnectionChange(listener: () => void): () => void {
 
 export function saveConnection({ server, token }: Connection): void {
   try {
-    const trimmed = server.trim().replace(/\/$/, "");
+    // Normalised on the way *in*, not just when a request is built, so the
+    // stored value and the value shown back to the user are the real one. A
+    // host pasted without a scheme would otherwise sit in storage looking
+    // correct while resolving relative to this page.
+    const trimmed = normalizeServerUrl(server);
     if (trimmed) window.localStorage.setItem(SERVER_KEY, trimmed);
     else window.localStorage.removeItem(SERVER_KEY);
 

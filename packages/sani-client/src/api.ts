@@ -42,8 +42,39 @@ export interface ApiOptions {
   fetchImpl?: typeof fetch;
 }
 
+/**
+ * Make a user-typed server address usable.
+ *
+ * A bare host is the single easiest way to break this app, because the UI itself
+ * invites it: the header renders the server with the scheme stripped for
+ * legibility, so copying what is on screen and pasting it back stores
+ * `example.trycloudflare.com`. That is a *relative* URL — every request silently
+ * resolves against the page's own origin, 404s, and surfaces as "cannot reach
+ * the server", which sends you off debugging a server that was fine all along.
+ *
+ * So a missing scheme is filled in rather than rejected: `https` in general,
+ * `http` for loopback, since a local dev server is not running TLS.
+ */
+export function normalizeServerUrl(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, "");
+  if (!trimmed) return trimmed;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return trimmed;
+
+  const authority = trimmed.split("/")[0];
+  // Bracketed IPv6 has to be pulled out before splitting on ":", or `[::1]:8060`
+  // yields "[" and a loopback address gets treated as a remote host.
+  const host = (
+    authority.startsWith("[")
+      ? authority.slice(0, authority.indexOf("]") + 1)
+      : authority.split(":")[0]
+  ).toLowerCase();
+
+  const loopback = host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  return `${loopback ? "http" : "https"}://${trimmed}`;
+}
+
 export function createApi(baseUrl: string, options: ApiOptions = {}) {
-  const server = baseUrl.replace(/\/$/, "");
+  const server = normalizeServerUrl(baseUrl);
   const token = options.token?.trim() || null;
   const fetchImpl = options.fetchImpl ?? fetch;
 

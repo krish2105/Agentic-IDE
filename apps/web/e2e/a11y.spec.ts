@@ -33,7 +33,7 @@ function makeWorkspace(): string {
 async function blockedSession(page: Page): Promise<string> {
   const response = await page.request.post(`${SERVER}/session`, {
     headers: authHeaders(),
-    data: { task: "add a greeting module", workspace: makeWorkspace() },
+    data: { task: "add a greeting module", workspace: makeWorkspace(), model_backend: "scripted" },
   });
   const { session_id } = await response.json();
   await page.goto(`/session/${session_id}`);

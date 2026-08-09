@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sani_core import PROTOCOL_VERSION, __version__
 from sani_core.approvals import AlreadyResolved, UnknownAction
 from sani_core.events import EventType
+from sani_core.models import BACKEND_ENV_VAR
 from sani_core.permissions import ALWAYS_CONFIRM, PermissionLocked
 from sani_core.tools import ToolError
 
@@ -144,6 +145,16 @@ def create_app(manager: SessionManager | None = None) -> FastAPI:
             # Lets a client tell "no token needed" apart from "your token was
             # wrong" without having to guess from a 401.
             "auth": describe_auth(),
+            # The scripted planner replays a canned plan and ignores the task,
+            # which is invisible from the outside: you get a confident plan about
+            # something you did not ask for and nothing anywhere says why. A
+            # client can now say so, and the e2e suite can refuse to run against
+            # a server whose default would make its assertions meaningless.
+            "model": {
+                "backend": os.environ.get(BACKEND_ENV_VAR, "scripted"),
+                "name": os.environ.get("SANI_MODEL"),
+                "scripted": os.environ.get(BACKEND_ENV_VAR, "scripted") == "scripted",
+            },
         }
 
     return app

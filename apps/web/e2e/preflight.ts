@@ -71,6 +71,22 @@ export async function preflight(): Promise<void> {
         `  It has SANI_AUTH_TOKEN set; run the suite with the same value in SANI_AUTH_TOKEN.`,
     );
   }
+  // Most specs pin `model_backend: "scripted"` per session, but the first
+  // ide.spec test creates its session through the UI and so inherits the
+  // server's default. Against a litellm server the plan is whatever the model
+  // says, there is no guaranteed `file.delete` to gate on, and the failure is a
+  // selector timeout on `approval-card` — which looks like a broken approval
+  // gate rather than a server configured for real use.
+  const health = await fetch(`${SERVER}/healthz`).then((r) => r.json());
+  if (health?.model && health.model.scripted !== true) {
+    throw new Error(
+      `The server is running the '${health.model.backend}' backend.\n` +
+        `  This suite asserts against the scripted planner's fixed plan, so a real model makes it fail\n` +
+        `  on selectors that are not broken. Restart without a Groq key, or:\n` +
+        `      SANI_MODEL_BACKEND=scripted uv run uvicorn sani_server.app:app --port ${new URL(SERVER).port}`,
+    );
+  }
+
   const allowed = response.headers.get("access-control-allow-origin");
   if (allowed !== WEB && allowed !== "*") {
     throw new Error(
